@@ -177,6 +177,45 @@ export interface WorkBuddyAccount {
   health?: string
 }
 
+/** 派生的账号健康状态，供 UI 与状态文档读取。 */
+export type AccountHealthState = 'healthy' | 'degraded' | 'unknown'
+
+/**
+ * 基于既有运行时状态字段派生账号健康状态，不发起任何上游 probe 调用。
+ *
+ * 派生规则（按优先级，任一命中即返回）：
+ * 1. `credentialDeadUntilMs` 未到期（上游以 401/403 拒绝登录）→ `degraded`；
+ * 2. `cooldownUntilMs` 未到期（账号级冷却：credits 耗尽 / 配额墙）→ `degraded`；
+ * 3. `rateLimitHits > 0`（自上次 reset 以来有连续限流记录，即便当前不在冷却窗口）→ `degraded`；
+ * 4. 三个信号都缺失（例如只拿到旧格式元数据）→ `unknown`（信息不足）；
+ * 5. 其余（信号齐全且无任何异常记录）→ `healthy`。
+ *
+ * 参数使用 `Partial` 以兼容旧内存对象：`cooldownUntilMs` / `rateLimitHits` 在
+ * `WorkBuddyAccount` 上为必填，但调用方（如只持有 `StoredAccount` 元数据）可能
+ * 拿不到运行时信号，此时按“信息不足”处理，绝不臆造 healthy/degraded。
+ */
+export function deriveAccountHealth(
+  account: Partial<Pick<WorkBuddyAccount, 'credentialDeadUntilMs' | 'cooldownUntilMs' | 'rateLimitHits'>>,
+  now: number = Date.now(),
+): AccountHealthState {
+  const deadUntil = account.credentialDeadUntilMs ?? 0
+  const coolUntil = account.cooldownUntilMs ?? 0
+  const hits = account.rateLimitHits ?? 0
+
+  // 信息不足：三个信号字段全部缺失，无法判定。
+  const hasAnySignal =
+    account.credentialDeadUntilMs !== undefined ||
+    account.cooldownUntilMs !== undefined ||
+    account.rateLimitHits !== undefined
+  if (!hasAnySignal) return 'unknown'
+
+  if (deadUntil > now) return 'degraded'
+  if (coolUntil > now) return 'degraded'
+  if (hits > 0) return 'degraded'
+
+  return 'healthy'
+}
+
 function nonEmptyEnv(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
@@ -2646,6 +2685,19 @@ ${new Date(until).toISOString()}
       // and the benefit is that a working account is never hidden by a stale mark.
       account.credentialDeadUntilMs = 0
     }
+  }
+
+  /**
+   * 派生单个账号的健康状态（只读，供 UI 与状态文档读取）。
+   *
+   * 直接基于该账号当前的运行时信号字段（`credentialDeadUntilMs` /
+   * `cooldownUntilMs` / `rateLimitHits`）派生，不写入 `health` 字段、不发起
+   * 任何上游 probe 调用。账号不存在时返回 `undefined`。
+   */
+  healthOf(accountId: string): AccountHealthState | undefined {
+    const account = this.accounts.find(item => item.id === accountId)
+    if (account === undefined) return undefined
+    return deriveAccountHealth(account)
   }
 
   /** Diagnostics snapshot. Account-wide cooling count (per-model cooling excluded:
