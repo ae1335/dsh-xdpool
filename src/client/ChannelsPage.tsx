@@ -397,7 +397,7 @@ export function ChannelsPage({ t }: ChannelsPageProps) {
       {error !== undefined && (
         <p className="dsm-xdpool-panel-error">{error}</p>
       )}
-      {state === 'pending' && (
+      {state === 'pending' && error === undefined && (
         <p className="dsm-xdpool-panel-empty">{t?.('chan.pending')}</p>
       )}
       {/*

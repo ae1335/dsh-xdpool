@@ -1486,11 +1486,13 @@ export function PoolCard({ t, settingsScope }: PoolCardProps) {
       brandNote: brand.note,
       stateLabel: error !== undefined
         ? (t?.('row.requestFailed') ?? 'Request failed')
-        : accountCount === 0
-          ? (t?.('row.regionEmpty') ?? t?.('row.poolEmpty') ?? 'No account yet')
-          : state === 'ok'
-            ? (t?.('row.ok') ?? 'Healthy')
-            : (t?.('row.allCooling') ?? 'All cooling'),
+        : idle
+          ? (t?.('row.regionWaiting') ?? 'Waiting for the first status answer')
+          : accountCount === 0
+            ? (t?.('row.regionEmpty') ?? t?.('row.poolEmpty') ?? 'No account yet')
+            : state === 'ok'
+              ? (t?.('row.ok') ?? 'Healthy')
+              : (t?.('row.allCooling') ?? 'All cooling'),
       models,
       modelState,
       activeAccount,

@@ -513,6 +513,7 @@ export const en = {
   'backup.confirm': 'This REPLACES all {count} account(s). Continue?',
   'backup.imported': 'Imported {accounts} account(s) with {credentials} credential(s).',
   'backup.importedPartial': 'Imported {accounts} account(s), {skipped} skipped.',
+  'backup.reimportHint': 'If a restored WorkBuddy account no longer works on this new device, scan the QR code to sign in again.',
   /** Balance panel: what is LEFT, not what was spent. */
   'bal.title': 'Channel credits',
   'bal.refresh': 'Refresh',
@@ -1170,6 +1171,7 @@ export const zh: Record<XdPoolSettingsKey, string> = {
   'backup.confirm': '这会**整体替换**现有 {count} 个账号，继续吗？',
   'backup.imported': '已导入 {accounts} 个账号、{credentials} 份凭据。',
   'backup.importedPartial': '已导入 {accounts} 个账号，{skipped} 个被跳过。',
+  'backup.reimportHint': '如还原的 WorkBuddy 账号在新设备上失效，请重新扫码登录。',
   /** 余额看板：显示还剩多少，不是花了多少。 */
   'bal.title': '渠道积分',
   'bal.refresh': '刷新',

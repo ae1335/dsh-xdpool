@@ -58,6 +58,7 @@ export function BackupPanel({ t }: { readonly t?: Translate | undefined }): Reac
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
+  const [restored, setRestored] = useState(false)
   /**
    * The chosen file, held in state rather than only in a ref.
    *
@@ -69,7 +70,7 @@ export function BackupPanel({ t }: { readonly t?: Translate | undefined }): Reac
   const [picked, setPicked] = useState<{ name: string; text: Promise<string> } | undefined>(undefined)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
-  const reset = (): void => { setNotice(undefined); setError(undefined) }
+  const reset = (): void => { setNotice(undefined); setError(undefined); setRestored(false) }
   const tooShort = password.length < MIN_PASSWORD
 
   /**
@@ -216,6 +217,7 @@ export function BackupPanel({ t }: { readonly t?: Translate | undefined }): Reac
       // The file has been consumed; keeping its name on screen invites a second import of
       // the same backup.
       setPicked(undefined)
+      setRestored(true)
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -307,6 +309,7 @@ export function BackupPanel({ t }: { readonly t?: Translate | undefined }): Reac
       )}
 
       {notice === undefined ? null : <p className="dsm-xdpool-bak-note">{notice}</p>}
+      {restored ? <p className="dsm-xdpool-bak-note">{t?.('backup.reimportHint') ?? ''}</p> : null}
       {error === undefined ? null : <p className="dsm-xdpool-bak-error">{error}</p>}
     </div>
   )
