@@ -70,8 +70,20 @@ function isStoredAccount(value: unknown): value is StoredAccount {
     && typeof (credential as Record<string, unknown>)['refreshToken'] === 'string'
 }
 
-/** First ~80 chars of an error message, for a warning line that stays short. */
+/**
+ * Short, log-safe error summary.
+ *
+ * `JSON.parse` throws a `SyntaxError` whose V8 message embeds a raw fragment of
+ * the offending text — this store carries `accessToken`, so that fragment must
+ * never reach a log line. A `SyntaxError` is reduced to its name plus, when
+ * present, the byte position; the message is dropped entirely. Other errors keep
+ * their own short message.
+ */
 function errorSummary(error: unknown): string {
+  if (error instanceof SyntaxError) {
+    const position = /position (\d+)/i.exec(error.message)
+    return position ? `SyntaxError at position ${position[1]}` : 'SyntaxError'
+  }
   const message = error instanceof Error ? error.message : String(error)
   return message.slice(0, 80)
 }

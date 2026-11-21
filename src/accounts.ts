@@ -245,8 +245,20 @@ export function isEncryptedCredentialError(value: unknown): boolean {
     && (value as { code?: unknown }).code === ENCRYPTED_CREDENTIAL_CODE
 }
 
-/** First ~80 chars of an error message, kept short for log lines. */
+/**
+ * Short, log-safe error summary.
+ *
+ * `JSON.parse` throws a `SyntaxError` whose V8 message embeds a raw fragment of
+ * the offending text — for credential files that fragment is token material and
+ * must never reach a log line. A `SyntaxError` is therefore reduced to its name
+ * plus, when present, the byte position; the message is dropped entirely. Other
+ * errors (filesystem, crypto) keep their own short message.
+ */
 function errorSummary(error: unknown): string {
+  if (error instanceof SyntaxError) {
+    const position = /position (\d+)/i.exec(error.message)
+    return position ? `SyntaxError at position ${position[1]}` : 'SyntaxError'
+  }
   const message = error instanceof Error ? error.message : String(error)
   return message.slice(0, 80)
 }

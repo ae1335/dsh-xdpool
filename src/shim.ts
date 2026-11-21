@@ -376,8 +376,12 @@ function parseJson<T>(raw: string, guard: (value: unknown) => value is T, field:
   try {
     parsed = JSON.parse(raw)
   } catch (error: unknown) {
-    const summary = error instanceof Error ? error.message : String(error)
-    return { ok: false, error: `${field} is not valid JSON (${summary.slice(0, 80)})` }
+    // A JSON.parse SyntaxError embeds a raw fragment of the offending text, and a
+    // request body can carry secrets; never log the message. Keep only the error
+    // name and, when present, the byte position.
+    const position = error instanceof SyntaxError ? /position (\d+)/i.exec(error.message) : null
+    const summary = position ? `SyntaxError at position ${position[1]}` : (error instanceof Error ? error.name : 'Error')
+    return { ok: false, error: `${field} is not valid JSON (${summary})` }
   }
   if (!guard(parsed)) return { ok: false, error: `${field} has an unexpected shape` }
   return { ok: true, value: parsed }
