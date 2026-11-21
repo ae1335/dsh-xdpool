@@ -1,0 +1,18 @@
+packages:
+  - '.'
+
+# 上游 @deepseek-ai/dsh-* 系列 0.1.x 全系无 stable 版本（仅 rc/alpha），
+# 而 dsh-settings/dsh-credentials/dsh-client-runtime 等包的 peer 依赖用 caret 范围
+# （如 ^0.1.5-rc.2）。pnpm 在 auto-install-peers=false 下解析时会把 caret 下界
+# 剥离 prerelease 成 >=0.1.5，registry 无满足 stable 版 → install 无解报错。
+# 此处将 5 个同步发布的兄弟包显式钉到 0.1.5-rc.3（其 peer 为 cordis@4.0.2，与项目 devDep 一致）。
+overrides:
+  '@deepseek-ai/dsh-invariants': 0.1.5-rc.3
+  '@deepseek-ai/dsh-session': 0.1.5-rc.3
+  '@deepseek-ai/dsh-attachment': 0.1.5-rc.3
+  '@deepseek-ai/dsh-scope': 0.1.5-rc.3
+  '@deepseek-ai/dsh-sandbox': 0.1.5-rc.3
+
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false
