@@ -2275,10 +2275,23 @@ function AccountBlock({
    */
   serving?: boolean
 }) {
+  // 账号池元数据（B1 增量）：host 侧已正式下发至 PoolWebAccount（status-paths.ts），
+  // 此处直接访问即可；旧数据缺失时为 undefined，调用处据此跳过渲染。
+  const meta = account
   const isDisabled = account.disabled === true
   const isPreferred = account.preferred === true
   const isCooling = account.cooling === true
   const isDead = account.credentialDead === true
+  // 健康徽标（B1 增量）：三态映射到既有 tag 配色体系；host 未下发时为 null，不渲染。
+  const healthBadge = meta.health === 'healthy'
+    ? { text: t?.('row.healthHealthy') ?? 'Healthy', cls: 'dsm-xdpool-health dsm-xdpool-account-tag' }
+    : meta.health === 'degraded'
+      ? { text: t?.('row.healthDegraded') ?? 'Degraded', cls: 'dsm-xdpool-health dsm-xdpool-account-tag dsm-xdpool-account-tag-degraded' }
+      : meta.health === 'unknown'
+        ? { text: t?.('row.healthUnknown') ?? 'Unknown', cls: 'dsm-xdpool-health dsm-xdpool-account-tag dsm-xdpool-account-tag-unknown' }
+        : null
+  // 过期时间格式化（B1 增量）：无效值返回空串，调用处据此跳过渲染。
+  const expiryText = meta.expiryAtMs !== undefined ? formatExpiry(meta.expiryAtMs) : ''
   const cooldownUntil = account.cooldownUntil !== undefined ? Date.parse(account.cooldownUntil) : undefined
   const modelCooldowns = account.modelCooldowns ?? []
   // Only a whole-account cooldown gets a tag. Per-model cooldowns do NOT mark
@@ -2312,6 +2325,12 @@ function AccountBlock({
             </span>
           : null}
         {tag === null ? null : <span className={tag.cls}>{tag.text}</span>}
+        {healthBadge === null
+          ? null
+          : <span className={healthBadge.cls}>
+              <span className="dsm-xdpool-health-dot" aria-hidden="true" />
+              {healthBadge.text}
+            </span>}
         {/* Pin this account to be tried first. A third control, not a fourth
             state of the switch above: "use this one first" and "only use this
             one" are different promises, and the pool only ever makes the first.
@@ -2368,6 +2387,27 @@ function AccountBlock({
             ? <span className="dsm-xdpool-account-meta">
                 {t?.('row.tokenExpiry', { time: formatDateTime(account.expiresAt) })
                   ?? `token ${formatDateTime(account.expiresAt)}`}
+              </span>
+            : null}
+          {/* B1 增量：host 侧可选下发的账号元数据，逐项判断缺失即不渲染。 */}
+          {meta.note !== undefined && meta.note !== ''
+            ? <span className="dsm-xdpool-account-meta">
+                {t?.('row.accountNote', { note: meta.note }) ?? `Note: ${meta.note}`}
+              </span>
+            : null}
+          {meta.group !== undefined && meta.group !== ''
+            ? <span className="dsm-xdpool-account-meta">
+                {t?.('row.accountGroup', { group: meta.group }) ?? `Group: ${meta.group}`}
+              </span>
+            : null}
+          {expiryText !== ''
+            ? <span className="dsm-xdpool-account-meta">
+                {t?.('row.accountExpiry', { time: expiryText }) ?? `expires ${expiryText}`}
+              </span>
+            : null}
+          {meta.usageCount !== undefined
+            ? <span className="dsm-xdpool-account-meta">
+                {t?.('row.accountUsage', { count: meta.usageCount }) ?? `${meta.usageCount} use(s)`}
               </span>
             : null}
           {isCooling && cooldownUntil !== undefined && !Number.isNaN(cooldownUntil)

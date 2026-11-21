@@ -980,6 +980,8 @@ interface WorkBuddyAccount {
   usageCount?: number;
   health?: string;
 }
+/** 派生的账号健康状态，供 UI 与状态文档读取。 */
+type AccountHealthState = 'healthy' | 'degraded' | 'unknown';
 /**
  * Platform-default directories holding the desktop app's auth files.
  * Windows probes Local before Roaming; a redirected profile still resolves
@@ -1753,6 +1755,14 @@ export declare class WorkBuddyAccountPool {
   penalize(accountId: string, resetAtMs?: number, modelId?: string): void;
   /** Clear all cooldowns (account-wide and per-model), e.g. from a reset command. */
   resetCooldowns(): void;
+  /**
+   * 派生单个账号的健康状态（只读，供 UI 与状态文档读取）。
+   *
+   * 直接基于该账号当前的运行时信号字段（`credentialDeadUntilMs` /
+   * `cooldownUntilMs` / `rateLimitHits`）派生，不写入 `health` 字段、不发起
+   * 任何上游 probe 调用。账号不存在时返回 `undefined`。
+   */
+  healthOf(accountId: string): AccountHealthState | undefined;
   /** Diagnostics snapshot. Account-wide cooling count (per-model cooling excluded:
    *  the account as a whole stays usable when only one model is limited). */
   status(): {
@@ -2262,6 +2272,17 @@ interface PoolWebAccount {
    */
   checkin?: PoolWebCheckin;
   checkinError?: string;
+  /**
+   * 账号池账本元数据（B1）：备注 / 分组 / 过期时间 / 使用次数，均为可选，
+   * 旧明文 accounts.json 缺失时不下发，卡片据此跳过渲染而非显示空串。
+   */
+  note?: string;
+  group?: string;
+  /** 用户为账号标记的过期时间戳（毫秒），独立于凭据的 token 过期时间。 */
+  expiryAtMs?: number;
+  usageCount?: number;
+  /** 派生的健康状态，恒为三态之一；卡片据此渲染健康徽标。 */
+  health?: 'healthy' | 'degraded' | 'unknown';
 }
 /** One credit package (as surfaced by the pool's upstream client), node-free. */
 interface PoolWebCreditPackage {

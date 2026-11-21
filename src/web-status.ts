@@ -21,7 +21,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { originTrusted, type TrustedHosts } from './origin-trust.ts'
 import { checkForUpdate } from './update-check.ts'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type { WorkBuddyAccount, WorkBuddyAccountPool } from './accounts.ts'
+import { deriveAccountHealth, type WorkBuddyAccount, type WorkBuddyAccountPool } from './accounts.ts'
 import type { WorkBuddyCatalog } from './catalog.ts'
 import { isGatewayRejectionError, regionOf, type WorkBuddyUpstreamClient } from './upstream.ts'
 import type { WorkBuddyShim } from './shim.ts'
@@ -785,6 +785,13 @@ function toWebAccount(account: WorkBuddyAccount, disabled: boolean, preferred: b
     creditReserve: reserve,
     reserved,
     rateLimitHits: account.rateLimitHits,
+    ...account.note === undefined || account.note === '' ? {} : { note: account.note },
+    ...account.group === undefined || account.group === '' ? {} : { group: account.group },
+    ...account.expiryAtMs === undefined ? {} : { expiryAtMs: account.expiryAtMs },
+    ...account.usageCount === undefined ? {} : { usageCount: account.usageCount },
+    // 派生健康状态（B1）：三态之一，卡片据此渲染健康徽标。旧格式缺失信号时
+    // deriveAccountHealth 返回 'unknown'，语义正确，无需特别区分。
+    health: deriveAccountHealth(account),
   }
 }
 function toWebModel(

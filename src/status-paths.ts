@@ -830,6 +830,17 @@ export interface PoolWebAccount {
    */
   checkin?: PoolWebCheckin
   checkinError?: string
+  /**
+   * 账号池账本元数据（B1）：备注 / 分组 / 过期时间 / 使用次数，均为可选，
+   * 旧明文 accounts.json 缺失时不下发，卡片据此跳过渲染而非显示空串。
+   */
+  note?: string
+  group?: string
+  /** 用户为账号标记的过期时间戳（毫秒），独立于凭据的 token 过期时间。 */
+  expiryAtMs?: number
+  usageCount?: number
+  /** 派生的健康状态，恒为三态之一；卡片据此渲染健康徽标。 */
+  health?: 'healthy' | 'degraded' | 'unknown'
 }
 /** One credit package (as surfaced by the pool's upstream client), node-free. */
 export interface PoolWebCreditPackage {

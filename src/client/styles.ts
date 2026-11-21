@@ -195,6 +195,11 @@ export const POOL_CARD_CSS = `
 .dsm-xdpool-ignored-restore:disabled{cursor:default;opacity:.6}
 .dsm-xdpool-account-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .dsm-xdpool-account-tag{padding:1px 8px;border-radius:999px;font-size:11px;line-height:18px;background:var(--dsw-alias-state-success-subtle,rgba(34,160,107,.12));color:var(--dsw-alias-state-success-primary,#22a06b)}
+/* 健康徽标（B1 增量）：三态复用 tag 的胶囊外形，仅换配色与前置圆点，不引入图标依赖。 */
+.dsm-xdpool-health{display:inline-flex;align-items:center;gap:5px}
+.dsm-xdpool-health-dot{width:6px;height:6px;border-radius:50%;flex:none;background:currentColor;opacity:.9}
+.dsm-xdpool-account-tag-degraded{background:var(--dsw-alias-state-warning-subtle,rgba(217,119,6,.15));color:var(--dsw-alias-state-warning-primary,#d97706)}
+.dsm-xdpool-account-tag-unknown{background:var(--dsw-alias-bg-layer-2,rgba(255,255,255,.06));color:var(--dsw-alias-label-tertiary,#9aa0a8)}
 .dsm-xdpool-account-tag-cooling{background:var(--dsw-alias-state-warning-subtle,rgba(217,119,6,.15));color:var(--dsw-alias-state-warning-primary,#d97706)}
 .dsm-xdpool-account-tag-error{background:var(--dsw-alias-state-error-subtle,rgba(239,68,68,.12));color:var(--dsw-alias-state-error-primary,#ef4444)}
 /* A rejected sign-in is red, not amber: unlike a cooldown it will not clear by
