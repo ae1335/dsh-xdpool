@@ -24,6 +24,7 @@ import {
   orderApiKeys,
   providerApiKeys,
   readAggregateSettings,
+  resetApiKeyCursors,
   updateProviderSetting,
   writeAggregateSettings,
 } from '../src/store.ts'
@@ -125,11 +126,18 @@ describe('orderApiKeys follows the chosen strategy', () => {
     expect(orderApiKeys(keys, undefined)).toEqual(['a', 'b', 'c'])
   })
 
-  it('round-robin rotates from a picked start and keeps every key', () => {
-    const rotated = orderApiKeys(keys, 'round-robin', () => 0.5)
-    expect(rotated).toEqual(['b', 'c', 'a'])
-    // Nothing is lost: a rotation reorders, it never filters.
-    expect([...rotated].sort()).toEqual(['a', 'b', 'c'])
+  it('round-robin rotates by a shared cursor, one key per call', () => {
+    resetApiKeyCursors()
+    // The cursor is the rotation memory now, not a random start: the third
+    // parameter (the old picker seam) is ignored by round-robin, and the same
+    // list advances one key per call, wrapping.
+    expect(orderApiKeys(keys, 'round-robin')).toEqual(['a', 'b', 'c'])
+    expect(orderApiKeys(keys, 'round-robin')).toEqual(['b', 'c', 'a'])
+    expect(orderApiKeys(keys, 'round-robin')).toEqual(['c', 'a', 'b'])
+    expect(orderApiKeys(keys, 'round-robin')).toEqual(['a', 'b', 'c'])
+    // Nothing is ever lost: a rotation reorders, it never filters.
+    expect([...orderApiKeys(keys, 'round-robin')].sort()).toEqual(['a', 'b', 'c'])
+    resetApiKeyCursors()
   })
 
   it('balanced spreads from a random start as well', () => {
@@ -151,10 +159,10 @@ describe('orderApiKeys follows the chosen strategy', () => {
   })
 
   it('an out-of-range pick still yields a permutation, never a dropped key', () => {
-    // `picker` is a seam for tests and could be a caller bug; a key list is what a
-    // request is made with, so it must survive a bad float intact.
+    // `picker` is a seam for the balanced branch and could be a caller bug; a key
+    // list is what a request is made with, so it must survive a bad float intact.
     for (const value of [-1, 1, 1.5, Number.NaN]) {
-      const out = orderApiKeys(keys, 'round-robin', () => value)
+      const out = orderApiKeys(keys, 'balanced', () => value)
       expect([...out].sort()).toEqual(['a', 'b', 'c'])
     }
   })

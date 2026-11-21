@@ -496,6 +496,22 @@ export function providerApiKeys(setting: ProviderSetting): readonly string[] {
 }
 
 /**
+ * Shared process-internal cursor for the `round-robin` strategy.
+ *
+ * Keyed by the JOIN of the key list rather than by provider: this function
+ * receives no provider id, and any change to the list (add or remove a key) is
+ * a new rotation domain starting back at the first key. Memory only, and reset
+ * on restart — like the combo lane's rotation, a cursor is a scheduling detail
+ * that must never be persisted.
+ */
+const apiKeyCursors = new Map<string, number>()
+
+/** Forget every rotation cursor. Exists for tests, not for callers. */
+export function resetApiKeyCursors(): void {
+  apiKeyCursors.clear()
+}
+
+/**
  * The order to TRY this provider's keys in, per the chosen strategy.
  *
  * `priority` (the default) is the stored order, which is also what the retry loop
@@ -518,15 +534,19 @@ export function orderApiKeys(
   if (first === undefined) return keys
   switch (strategy) {
     case 'round-robin': {
-      // Rotate: the least-recently-first key leads this time. Without shared
-      // state the honest approximation is a random start, which spreads the load
-      // evenly over a session instead of always hammering entry 0.
-      const at = Math.floor(picker() * keys.length)
-      const index = at < 0 || at >= keys.length ? 0 : at
+      // True rotation: the next key in line leads this time, and the shared
+      // cursor advances by one (wrapping) so the following request leads with
+      // the key after it. Memory only — a restart begins at the stored order,
+      // which is the honest answer for a cursor that was never persisted.
+      const domain = keys.join('\u0000')
+      const at = apiKeyCursors.get(domain) ?? 0
+      const index = ((at % keys.length) + keys.length) % keys.length
+      apiKeyCursors.set(domain, index + 1)
       return [...keys.slice(index), ...keys.slice(0, index)]
     }
     case 'balanced': {
-      // Same idea, chosen for even spread rather than strict rotation.
+      // Chosen for even spread rather than strict rotation, so it keeps the
+      // random start: there is no schedule to remember, only load to spread.
       const at = Math.floor(picker() * keys.length)
       const index = at < 0 || at >= keys.length ? 0 : at
       return [...keys.slice(index), ...keys.slice(0, index)]

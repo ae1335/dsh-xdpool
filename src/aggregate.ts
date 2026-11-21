@@ -84,6 +84,71 @@ const TURN_TIMEOUT_MS = 300_000
 const USER_AGENT = 'dsh-xdpool/2.1'
 /** How much of an upstream body is quoted back in a failure message. */
 const BODY_SNIPPET_CHARS = 400
+/**
+ * How long a 429 (`soft_rate`) demotes a key when the provider gave no usable
+ * `Retry-After` hint. A minute is long enough to ride out most burst limits
+ * without freezing a key past the next turn.
+ */
+const SOFT_RATE_FALLBACK_MS = 60_000
+/**
+ * How long a 402 (`hard_credit`) demotes a key. A spent balance is a slow reset
+ * — topping up is a billing action, not a retry — so the window is deliberately
+ * long and fixed rather than read off a header that a 402 usually does not send.
+ */
+const HARD_CREDIT_COOLDOWN_MS = 10 * 60_000
+/**
+ * In-memory, per-provider-and-per-key cooldown bookkeeping.
+ *
+ * Keyed `${providerId}\u0000${apiKey}` so one provider's cooldown can never
+ * shadow another provider's same key, and a key that appears under two ids cools
+ * independently. The value is the cooldown deadline in epoch milliseconds.
+ *
+ * Memory only, and reset on restart: a cooldown is a live-state hint, not a
+ * durable fact, and persisting it would silently keep demoting a key after the
+ * provider's own limit has long reset. A plain synchronous `Map` is safe here
+ * because Node runs this module's event-loop turns one at a time — the same
+ * assumption the combo lane's rotation cursor already makes.
+ */
+const keyCooldownUntil = new Map<string, number>()
+
+/** Forget every cooldown. Exists for tests, not for callers. */
+export function resetKeyCooldowns(): void {
+  keyCooldownUntil.clear()
+}
+
+/** The process-internal cooldown key for one provider's one credential. */
+function cooldownKey(providerId: string, apiKey: string): string {
+  return `${providerId}\u0000${apiKey}`
+}
+
+/** Whether this key is still inside its cooldown window at `now`. */
+function isKeyCooling(providerId: string, apiKey: string, now: number): boolean {
+  const until = keyCooldownUntil.get(cooldownKey(providerId, apiKey))
+  return until !== undefined && until > now
+}
+
+/** Record a cooldown deadline for one provider's one credential. */
+export function setKeyCooldown(providerId: string, apiKey: string, untilMs: number): void {
+  if (apiKey === '') return
+  keyCooldownUntil.set(cooldownKey(providerId, apiKey), untilMs)
+}
+
+/**
+ * Move keys still cooling to the end of the list, keeping every key.
+ *
+ * Demotion, not removal: the alternates stay reachable, and a cooling key comes
+ * back once its window passes. The order among the ready keys and among the
+ * cooling keys is left as the caller passed it. Exported with an explicit `now`
+ * so a test can drive the window without touching the clock.
+ */
+export function demoteCoolingKeys(providerId: string, apiKeys: readonly string[], now: number): string[] {
+  const ready: string[] = []
+  const cooling: string[] = []
+  for (const key of apiKeys) {
+    ;(key !== '' && isKeyCooling(providerId, key, now) ? cooling : ready).push(key)
+  }
+  return [...ready, ...cooling]
+}
 /** A trimmed non-empty string, or ''. */
 function text(value: unknown): string {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : ''
@@ -265,7 +330,7 @@ export function resolveAggregateProvider(
   // Ordered by the chosen strategy so `apiKeys[0]` is the key to try first. The
   // retry loop walks the list in this order, which means a non-priority strategy
   // changes which key leads without changing the fallback order behind it.
-  const apiKeys = orderApiKeys(providerApiKeys(setting), setting.distribution)
+  const apiKeys = demoteCoolingKeys(provider.id, orderApiKeys(providerApiKeys(setting), setting.distribution), Date.now())
   const apiKey = apiKeys[0] ?? ''
   // The provider's own declared headers first, credential last: a provider that
   // ships a `user-agent` or an `anthropic-beta` keeps it.
@@ -873,6 +938,18 @@ export async function forwardAggregateStreamed(
       const retryAfter = retryAfterMs(response)
       const refusal = await response.text().catch(() => '')
       const failure = classifyUpstream(response.status, refusal, retryAfter, key)
+      // Remember a refusal so the NEXT request demotes this key before it is
+      // tried, instead of discovering the same limit again. `soft_rate` uses the
+      // provider's own reset hint when one arrived, else a short fallback; a
+      // `hard_credit` gets the long fixed window — a spent balance is a billing
+      // action, not a retry. The credential itself never reaches a log: this
+      // bookkeeping is a plain in-memory deadline, keyed with the same id the
+      // provider id already travels under.
+      if (failure.kind === 'soft_rate') {
+        setKeyCooldown(resolved.providerId, key, Date.now() + (retryAfter ?? SOFT_RATE_FALLBACK_MS))
+      } else if (failure.kind === 'hard_credit') {
+        setKeyCooldown(resolved.providerId, key, Date.now() + HARD_CREDIT_COOLDOWN_MS)
+      }
       const rotatable = failure.kind === 'soft_rate' || failure.kind === 'session_dead'
       if (!rotatable || index === keys.length - 1) throw failure
     }
