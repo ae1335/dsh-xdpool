@@ -67,6 +67,52 @@ export interface InstallResult {
 }
 
 /**
+ * Write `package.json` with a backup so a half-written file can be rolled back.
+ *
+ * The profile's `package.json` is the host's one source of truth for what to load on
+ * startup. A crash between `writeFileSync` and the OS flushing the page would leave a
+ * truncated JSON file and, on the next start, a plugin that does not load — with no
+ * automatic repair. So the original is copied to `<path>.bak` first, and on any write
+ * error the original is written back. The backup is removed when the write lands (or
+ * when the restore lands), so a leftover `.bak` is itself a signal that neither
+ * succeeded and manual recovery is possible.
+ *
+ * This is extracted from `installVersion` so the recovery path is testable without
+ * touching the registry or the real profile.
+ */
+/** The filesystem calls `writePackageJsonAtomic` needs, injectable for testing. */
+export interface AtomicWriteFs {
+  readFileSync: typeof readFileSync
+  writeFileSync: typeof writeFileSync
+  rmSync: typeof rmSync
+}
+
+const defaultFs: AtomicWriteFs = { readFileSync, writeFileSync, rmSync }
+
+export function writePackageJsonAtomic(pkgPath: string, content: string, fs: AtomicWriteFs = defaultFs): void {
+  const backupPath = `${pkgPath}.bak`
+  // The caller has already read this file, so it exists; if it does not, there is
+  // nothing to back up and nothing to safely overwrite — fail loudly instead of
+  // fabricating a backup.
+  const original = fs.readFileSync(pkgPath, 'utf8')
+  fs.writeFileSync(backupPath, original, 'utf8')
+  try {
+    fs.writeFileSync(pkgPath, content, 'utf8')
+  } catch (error) {
+    // Put the working file back. If even that fails, leave the `.bak` in place so
+    // the user still has the last known-good content rather than a truncated file.
+    try {
+      fs.writeFileSync(pkgPath, original, 'utf8')
+      fs.rmSync(backupPath, { force: true })
+    } catch {
+      // Restore failed: the backup stays for manual recovery.
+    }
+    throw error
+  }
+  fs.rmSync(backupPath, { force: true })
+}
+
+/**
  * Download a version and point the profile at it.
  *
  * The order matters: download first, verify it is a gzip tarball, and only then touch
@@ -137,7 +183,7 @@ export async function installVersion(version: string): Promise<InstallResult> {
         error: `profile 的 package.json 里没有 ${PACKAGE}，无法自动更新`,
       }
     }
-    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8')
+    writePackageJsonAtomic(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
     return { ok: true, version, path: target, restartRequired: true }
   } catch (error: unknown) {
     return {
