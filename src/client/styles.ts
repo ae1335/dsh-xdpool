@@ -1251,6 +1251,12 @@ export const SHARED_CARD_CSS = `
 .dsm-xdpool-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}
 .dsm-xdpool-sec{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;border:1px solid color-mix(in srgb, var(--dsw-alias-border-l2,#36373b) 88%, transparent);background:color-mix(in srgb, var(--dsw-alias-bg-layer-2,#1c1e22) 82%, transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 5%), 0 2px 6px rgb(0 0 0 / 4%)}
 .dsm-xdpool-sectitle{margin:0;font-size:12px;font-weight:680;line-height:18px;letter-spacing:.2px;color:var(--dsw-alias-label-secondary,#c6c9d0);display:flex;align-items:center;gap:8px}
+.dsm-xdpool-trend{width:100%;height:180px;display:block}
+.dsm-xdpool-trend-legend{display:inline-flex;gap:12px;margin-left:auto;font-size:10.5px;font-weight:560;color:var(--dsw-alias-label-tertiary,#8a90a0)}
+.dsm-xdpool-trend-legend [data-series]{display:inline-flex;align-items:center;gap:5px}
+.dsm-xdpool-trend-legend [data-series]::before{content:"";width:10px;height:3px;border-radius:2px;background:var(--dsw-alias-state-success-primary,#4cc38a)}
+.dsm-xdpool-trend-legend [data-series="out"]::before{background:var(--dsw-alias-brand-primary,#5686fe)}
+.dsm-xdpool-exportbar{display:flex;gap:8px;flex-wrap:wrap}
 .dsm-xdpool-tablewrap{overflow-x:auto;max-width:100%}
 .dsm-xdpool-table{width:100%;min-width:760px;border-collapse:collapse;font-size:11.5px;line-height:17px}
 .dsm-xdpool-table th{text-align:left;font-weight:560;font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#8a90a0);padding:0 10px 8px;border-bottom:1px solid color-mix(in srgb, var(--dsw-alias-border-l1,#ffffff14) 70%, transparent);white-space:nowrap}

@@ -25,7 +25,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { POOL_USAGE_PATH } from '../status-paths.ts'
-import type { UsageAccountRow, UsageCall, UsageSummary } from '../stats.ts'
+import type { UsageAccountRow, UsageCall, UsageDay, UsageSummary } from '../stats.ts'
+import { serializeUsageCsv, serializeUsageJson } from '../usage-export.ts'
 import type { XdPoolSettingsKey } from './locales.ts'
 import { LEDGER_CARD_CSS } from './styles.ts'
 import { KpiCard, PageHero } from './shell.tsx'
@@ -60,6 +61,44 @@ function fmtClock(at: number): string {
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${hh}:${mm}`
+}
+/** 14 天粒度日序列，只取实际有数据的那些天。 */
+function trendDays(summary: UsageSummary): readonly UsageDay[] {
+  return summary.days.filter(day => day.calls > 0 || day.inputTokens > 0 || day.outputTokens > 0)
+}
+/**
+ * 折线坐标点字符串（`x,y x,y …`），供 `<polyline points>` 使用。
+ *
+ * 两个系列都按各自最大值归一化，而不是共用一个轴：输入 token 通常比输出
+ * 大一个量级，共轴会让输出线被压成贴着底的一条直线，看不出波动。每条线
+ * 单独撑满高度，牺牲了「两条线同尺度可比」换来「波动可见」——对趋势图，
+ * 后者才是读者要的东西。
+ */
+function trendPoints(days: readonly UsageDay[], key: 'inputTokens' | 'outputTokens', w: number, h: number, pad: number): string {
+  if (days.length === 0) return ''
+  const max = Math.max(...days.map(d => d[key]))
+  if (max <= 0) return ''
+  if (days.length === 1) {
+    const y = h - pad
+    const x = pad + (w - pad * 2) / 2
+    return `${x},${y} ${x},${y}`
+  }
+  const step = (w - pad * 2) / (days.length - 1)
+  return days
+    .map((d, i) => `${pad + i * step},${h - pad - (d[key] / max) * (h - pad * 2)}`)
+    .join(' ')
+}
+/** 触发一次浏览器下载：Blob → 临时 object URL → `<a download>`，不弹任何对话框。 */
+function triggerDownload(filename: string, content: string, mime: string): void {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 /**
  * Cache hit rate, or null when no input tokens were ever counted.
@@ -213,6 +252,8 @@ export function LedgerPage({ t, usage: shared }: LedgerPageProps) {
   }, [summary])
   const details = useMemo(() => summary?.entries.slice(0, DETAIL_ROWS) ?? [], [summary])
   const accounts: readonly UsageAccountRow[] = summary?.accounts ?? []
+  /** 趋势折线用的日序列（只留 14 天内有实际数据的日子）。 */
+  const trend = useMemo(() => summary === undefined ? [] : trendDays(summary), [summary])
   return (
     <>
       <style>{LEDGER_CARD_CSS}</style>
@@ -281,6 +322,67 @@ export function LedgerPage({ t, usage: shared }: LedgerPageProps) {
                   : (t?.('ledger.failedSub', { failed: summary.failedTurns, recovered: summary.recoveredTurns })
                     ?? `${summary.failedTurns} failed · ${summary.recoveredTurns} recovered`)}
               />
+            </div>
+            {trend.length === 0
+              ? null
+              : <section className="dsm-xdpool-sec">
+                  <h3 className="dsm-xdpool-sectitle">
+                    {t?.('ledger.usageTrend') ?? '14-day trend'}
+                    <span className="dsm-xdpool-trend-legend">
+                      <span data-series="in">In</span>
+                      <span data-series="out">Out</span>
+                    </span>
+                  </h3>
+                  {/* 纯 SVG 折线：输入/输出两条线各自归一化（见 trendPoints），
+                      不引入任何图表依赖，复用项目既有的内联 <svg> 模式。 */}
+                  <svg
+                    className="dsm-xdpool-trend"
+                    viewBox="0 0 560 180"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label={t?.('ledger.usageTrend') ?? '14-day token trend'}
+                  >
+                    <polyline
+                      fill="none"
+                      points={trendPoints(trend, 'inputTokens', 560, 180, 14)}
+                      stroke="var(--dsw-alias-state-success-primary,#4cc38a)"
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    <polyline
+                      fill="none"
+                      points={trendPoints(trend, 'outputTokens', 560, 180, 14)}
+                      stroke="var(--dsw-alias-brand-primary,#5686fe)"
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </section>}
+            <div className="dsm-xdpool-exportbar">
+              <button
+                type="button"
+                className="dsm-xdpool-btn"
+                onClick={() => triggerDownload(
+                  `xdpool-usage-${new Date().toISOString().slice(0, 10)}.csv`,
+                  serializeUsageCsv(summary),
+                  'text/csv;charset=utf-8',
+                )}
+              >
+                {t?.('ledger.exportCsv') ?? 'Export CSV'}
+              </button>
+              <button
+                type="button"
+                className="dsm-xdpool-btn"
+                onClick={() => triggerDownload(
+                  `xdpool-usage-${new Date().toISOString().slice(0, 10)}.json`,
+                  serializeUsageJson(summary),
+                  'application/json;charset=utf-8',
+                )}
+              >
+                {t?.('ledger.exportJson') ?? 'Export JSON'}
+              </button>
             </div>
             {details.length === 0
               ? <p className="dsm-xdpool-note">
