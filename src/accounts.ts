@@ -16,7 +16,13 @@ import { readFile, readdir, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { regionOf, type WorkBuddyRegion } from './upstream.ts'
-import { accountStorePath, isStateFile, loadStoredAccounts, saveStoredAccounts, snapshotDirPath } from './account-store.ts'
+import {
+  accountStorePath,
+  isStateFile,
+  loadStore,
+  saveStoredAccounts,
+  snapshotDirPath,
+} from './account-store.ts'
 import {
   encryptedFieldKeyId,
   isEncryptedFieldWrapper,
@@ -155,6 +161,20 @@ export interface WorkBuddyAccount {
    * `0`/undefined means "not known to be dead".
    */
   credentialDeadUntilMs?: number
+  /**
+   * Optional pool bookkeeping (A2), persisted through the durable store.
+   *
+   * Every field is OPTIONAL and defaults to absent on a plaintext `accounts.json`
+   * from an older build, so reads stay backward-compatible and writes never
+   * fabricate a value the user did not set. They exist so a "complete" account
+   * pool can carry the metadata the card and the pick logic want to show:
+   */
+  note?: string
+  group?: string
+  tags?: string[]
+  expiryAtMs?: number
+  usageCount?: number
+  health?: string
 }
 
 function nonEmptyEnv(value: unknown): string | undefined {
@@ -935,6 +955,18 @@ export class WorkBuddyAccountPool {
    * lives on the pool and is re-applied from settings after each scan.
    */
   private disabledIds = new Set<string>()
+  /**
+   * Account ids the user deleted for good (soft delete).
+   *
+   * Distinct from {@link ignoredIds} (which is supplied by the host from the
+   * plugin's ignore file) and from {@link disabledIds} (which only filters at
+   * pick time and leaves the account re-discoverable). A soft-deleted account
+   * is dropped from the pool AND kept out of every future scan, so re-scanning
+   * cannot resurrect it from its auth file or channel credential. The id list is
+   * persisted in the store document (`deleted`) and re-applied on load, so the
+   * deletion survives restarts.
+   */
+  private deletedIds = new Set<string>()
 
   /**
    * The account ids the store held after the last successful write.
@@ -1147,6 +1179,35 @@ export class WorkBuddyAccountPool {
   }
 
   /**
+   * Soft-delete an account: drop it from the pool now, and keep its id out of
+   * every future scan so it cannot resurrect from its auth file or channel
+   * credential.
+   *
+   * Distinct from {@link applyIgnored}: ignore is a host-managed list supplied
+   * wholesale; delete is a user action that persists in the store's own
+   * document. Both survive restarts — ignore via the host's file, delete via
+   * `deleted` in the store — and neither is a `disable` (which only filters at
+   * pick time and leaves the account listed and re-discoverable).
+   */
+  deleteAccount(accountId: string): void {
+    this.deletedIds.add(accountId)
+    this.accounts = this.accounts.filter(account => account.id !== accountId)
+    if (this.persistent) {
+      // Persist immediately so the deletion outlives this process even if the
+      // next scan is never reached. Fire-and-forget: a failed write leaves the
+      // in-memory tombstone in place, and the next scan re-persists it.
+      void saveStoredAccounts(this.storePath, this.accounts, [...this.deletedIds]).catch((error: unknown) => {
+        this.logger?.warn?.('dsh-xdpool: could not persist account deletion', error)
+      })
+    }
+  }
+
+  /** Every soft-deleted id currently in force, in insertion order. */
+  deletedAccountIds(): string[] {
+    return [...this.deletedIds]
+  }
+
+  /**
    * Credential files the last scan could not read, with the reason.
    *
    * Exposed because a short account list is otherwise indistinguishable from a
@@ -1211,6 +1272,18 @@ export class WorkBuddyAccountPool {
   async scan(): Promise<WorkBuddyAccount[]> {
     const found: WorkBuddyCredential[] = []
     const skipped: WorkBuddySkippedFile[] = []
+    // Load the durable store ONCE up front so the tombstone list is in place
+    // BEFORE the disk scan below: a soft-deleted account whose auth file is
+    // still on disk must be skipped at discovery time, not resurrected and only
+    // re-filtered later. Accounts are seeded AFTER the scan (below) so a
+    // freshly-read disk credential still wins over the stored copy. The
+    // accounts and their tombstones come from the SAME parsed document, so a
+    // `.bak` recovery can never hand back accounts whose `deleted` list was
+    // read from a different file state.
+    const persisted = this.persistent ? await loadStore(this.storePath) : undefined
+    if (persisted !== undefined) {
+      for (const id of persisted.deleted) this.deletedIds.add(id)
+    }
     // The plugin's own data directory is a scan source too: `import` writes
     // `<md5prefix>.json` snapshots there, and every credential in it is an
     // account the user deliberately parked. Without this the snapshots were
@@ -1244,6 +1317,9 @@ export class WorkBuddyAccountPool {
         // Second gate: the cheap probe could not identify this file, so the
         // ignored check happens now that the credential is fully parsed.
         if (this.ignoredIds.size > 0 && this.ignoredIds.has(workbuddyAccountId(credential))) continue
+        // Soft-deleted accounts stay gone: a re-scan of the same auth file must
+        // not resurrect what the user threw away.
+        if (this.deletedIds.size > 0 && this.deletedIds.has(workbuddyAccountId(credential))) continue
         found.push(credential)
       }
     }
@@ -1295,6 +1371,7 @@ export class WorkBuddyAccountPool {
         const external = await this.externalSource()
         for (const credential of external) {
           if (this.ignoredIds.size > 0 && this.ignoredIds.has(workbuddyAccountId(credential))) continue
+          if (this.deletedIds.size > 0 && this.deletedIds.has(workbuddyAccountId(credential))) continue
           found.push(credential)
         }
       } catch (error: unknown) {
@@ -1327,10 +1404,12 @@ export class WorkBuddyAccountPool {
     // The loop is already safe without the gate: `byId` holds this scan's
     // accounts first, and the `has` check below means a stored entry can only
     // ADD an account, never overwrite a fresher in-memory credential.
-    if (this.persistent) {
-      const stored = await loadStoredAccounts(this.storePath)
-      for (const entry of stored) {
+    if (persisted !== undefined) {
+      // Seed accounts from the same document read up front (single read: no
+      // second fetch, and accounts/deleted cannot disagree about file state).
+      for (const entry of persisted.accounts) {
         if (this.ignoredIds.size > 0 && this.ignoredIds.has(entry.id)) continue
+        if (this.deletedIds.has(entry.id)) continue
         if (byId.has(entry.id)) continue
         byId.set(entry.id, {
           id: entry.id,
@@ -1339,6 +1418,12 @@ export class WorkBuddyAccountPool {
           cooldownUntilMs: 0,
           modelCooldowns: {},
           rateLimitHits: 0,
+          ...entry.note !== undefined ? { note: entry.note } : {},
+          ...entry.group !== undefined ? { group: entry.group } : {},
+          ...entry.tags !== undefined ? { tags: entry.tags } : {},
+          ...entry.expiryAtMs !== undefined ? { expiryAtMs: entry.expiryAtMs } : {},
+          ...entry.usageCount !== undefined ? { usageCount: entry.usageCount } : {},
+          ...entry.health !== undefined ? { health: entry.health } : {},
         })
       }
     }
@@ -1446,7 +1531,7 @@ export class WorkBuddyAccountPool {
               + 'Their credentials are gone unless they are signed in again.',
           )
         }
-        await saveStoredAccounts(this.storePath, this.accounts)
+        await saveStoredAccounts(this.storePath, this.accounts, [...this.deletedIds])
         this.lastPersistedIds = new Set(this.accounts.map(account => account.id))
       } catch (error: unknown) {
         this.logger?.warn?.('dsh-xdpool: could not persist the account store', error)

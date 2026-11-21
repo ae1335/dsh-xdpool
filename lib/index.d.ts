@@ -965,6 +965,20 @@ interface WorkBuddyAccount {
    * `0`/undefined means "not known to be dead".
    */
   credentialDeadUntilMs?: number;
+  /**
+   * Optional pool bookkeeping (A2), persisted through the durable store.
+   *
+   * Every field is OPTIONAL and defaults to absent on a plaintext `accounts.json`
+   * from an older build, so reads stay backward-compatible and writes never
+   * fabricate a value the user did not set. They exist so a "complete" account
+   * pool can carry the metadata the card and the pick logic want to show:
+   */
+  note?: string;
+  group?: string;
+  tags?: string[];
+  expiryAtMs?: number;
+  usageCount?: number;
+  health?: string;
 }
 /**
  * Platform-default directories holding the desktop app's auth files.
@@ -1119,6 +1133,18 @@ export declare class WorkBuddyAccountPool {
    * lives on the pool and is re-applied from settings after each scan.
    */
   private disabledIds;
+  /**
+   * Account ids the user deleted for good (soft delete).
+   *
+   * Distinct from {@link ignoredIds} (which is supplied by the host from the
+   * plugin's ignore file) and from {@link disabledIds} (which only filters at
+   * pick time and leaves the account re-discoverable). A soft-deleted account
+   * is dropped from the pool AND kept out of every future scan, so re-scanning
+   * cannot resurrect it from its auth file or channel credential. The id list is
+   * persisted in the store document (`deleted`) and re-applied on load, so the
+   * deletion survives restarts.
+   */
+  private deletedIds;
   /**
    * The account ids the store held after the last successful write.
    *
@@ -1278,6 +1304,20 @@ export declare class WorkBuddyAccountPool {
   isIgnored(accountId: string): boolean;
   /** Every ignored id currently in force, in insertion order. */
   ignoredIdsInOrder(): string[];
+  /**
+   * Soft-delete an account: drop it from the pool now, and keep its id out of
+   * every future scan so it cannot resurrect from its auth file or channel
+   * credential.
+   *
+   * Distinct from {@link applyIgnored}: ignore is a host-managed list supplied
+   * wholesale; delete is a user action that persists in the store's own
+   * document. Both survive restarts — ignore via the host's file, delete via
+   * `deleted` in the store — and neither is a `disable` (which only filters at
+   * pick time and leaves the account listed and re-discoverable).
+   */
+  deleteAccount(accountId: string): void;
+  /** Every soft-deleted id currently in force, in insertion order. */
+  deletedAccountIds(): string[];
   /**
    * Credential files the last scan could not read, with the reason.
    *
