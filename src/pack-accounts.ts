@@ -24,10 +24,31 @@ import type { WorkBuddyCredential } from './accounts.ts'
 /**
  * Channel ids whose accounts this plugin serves itself.
  *
- * `buddy` is CodeBuddy (CN) and `workbuddy` is WorkBuddy AI (international);
- * both are the two lanes the two region cards exist for. Every other channel
- * (TRAE, Qoder, ZCode, …) keeps its own model roster and gateway and is listed
- * by the channel cards instead, so its accounts must not leak into this pool.
+ * `buddy` is CodeBuddy (CN) and `workbuddy` is WorkBuddy AI (international):
+ * the two region cards. This list is DELIBERATELY closed at those two, and the
+ * reason is the account pool's request path — not a filter that was never
+ * widened.
+ *
+ * The pool serves every credential through the WorkBuddy client
+ * (`client.chatStream` in `shim.ts`), keys it by WorkBuddy identity
+ * (`uin`/`uid`/`enterpriseId`) and files it CN-vs-international by `domain`
+ * (`regionOf`). A credential that is not WorkBuddy-shaped has none of those
+ * fields, so admitting it here would route it to the WorkBuddy upstream and
+ * 401 on its first pick. "Visible in the pool" without "servable by the pool"
+ * is exactly the duplicate-row bug this module exists to prevent.
+ *
+ * The other 11 pack channels — codearts, lobsterai, qoder, qodercn, trae,
+ * cline, loomy, raccoon, minimax, zcode, gemini — each register their own
+ * gateway as a HOST adapter (`llm.registerAdapter` in `vendor/channel-pack`).
+ * They are served by the generic channel lane (`channel-lane.ts`) through
+ * `ctx.llm`, which reads the pack's own account pool directly, so the plugin
+ * never holds (and cannot use) their credentials here. Folding them into this
+ * pool is a routing change in `shim.ts` — dispatch WorkBuddy accounts to
+ * `client.chatStream`, everything else to `ctx.llm.stream` — not a filter-list
+ * change, and it is C3-adjacent work, deferred on purpose.
+ *
+ * doubao is this plugin's own lane (`doubao-upstream.ts`), not the pack, so it
+ * never appears in the pack's pool either.
  */
 export const PACK_REGION_CHANNELS: readonly string[] = ['buddy', 'workbuddy']
 

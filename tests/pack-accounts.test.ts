@@ -17,12 +17,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   adoptChannelPackAccounts,
+  PACK_REGION_CHANNELS,
   packCredentialToWorkBuddy,
   readPackAccountPool,
   readPackCredentials,
   type PackAccountEntry,
 } from '../src/pack-accounts.ts'
 import { workbuddyAccountId, type WorkBuddyCredential } from '../src/accounts.ts'
+import { REGISTERED_CHANNELS } from '../src/channel-roster.ts'
 
 /** A channel entry, the subset of the pack's account row the bridge reads. */
 function entry(overrides: Partial<PackAccountEntry> & { provider: string }): PackAccountEntry {
@@ -137,6 +139,29 @@ describe('reading the pack pool', () => {
     // here would put them on a region card that cannot serve them.
     expect(credentials).toHaveLength(2)
     expect(credentials.every(c => c.sourcePath.startsWith('channel-pack:'))).toBe(true)
+  })
+
+  it('keeps the pool closed to channels whose credentials are not WorkBuddy-shaped', () => {
+    // B1 盘点结论：只有 buddy/workbuddy 的账号能经 `client.chatStream` 服务，
+    // 其余 pack 渠道各自注册 host adapter（`llm.registerAdapter`），由通用
+    // channel lane 通过 `ctx.llm` 直接读取 pack 自己的账号池，插件侧拿到它们
+    // 的 credential 也无法用 WorkBuddy 客户端服务（缺 uin/uid/enterpriseId，
+    // 且 domain 路由只认识 CN/国际两区）。因此 PACK_REGION_CHANNELS 必须保持
+    // 只含这两家——把任何一家误加进来都会让它以 WorkBuddy 形状进池、首个请求
+    // 就 401。此断言锁定该边界，防止未来有人“统一池”时误扩展列表导致回归。
+    const packChannels = REGISTERED_CHANNELS
+      .filter(channel => channel.id !== 'doubao') // doubao 自有 lane，不走 pack
+      .map(channel => channel.id)
+    // 13 家 pack 渠道 + doubao 自有 lane，共 14 家（doubao 已剔除）。
+    expect(packChannels).toHaveLength(13)
+    // 池只服务这俩 WorkBuddy 区域卡。
+    expect(PACK_REGION_CHANNELS).toEqual(['buddy', 'workbuddy'])
+    // 其余 11 家 pack 渠道的账号绝不允许以 WorkBuddy 形状进池。
+    const nonWorkBuddy = packChannels.filter(id => !PACK_REGION_CHANNELS.includes(id))
+    expect(nonWorkBuddy).toEqual([
+      'codearts', 'lobsterai', 'qoder', 'qodercn', 'trae', 'cline',
+      'loomy', 'raccoon', 'minimax', 'zcode', 'gemini',
+    ])
   })
 
   it('costs one unreadable credential, not the batch', async () => {
