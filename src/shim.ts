@@ -1498,7 +1498,12 @@ function withBareModelId(raw: string, modelId: string): string {
       const parsed = JSON.parse(raw) as { model?: unknown }
       modelId = typeof parsed.model === 'string' && parsed.model !== '' ? parsed.model : undefined
     } catch {
-      modelId = undefined
+      // A body this endpoint cannot parse is the caller's fault, not a
+      // transport or upstream condition: answer 400 explicitly instead of
+      // silently falling through to a lane that would misreport it as "no
+      // model was named" or "not signed in".
+      writeOpenAIError(res, 400, 'invalid_request', 'request body is not valid JSON')
+      return
     }
     // The gateway allowlist, enforced on the id the caller actually sent — so it
     // is checked before any lane strips a prefix or rewrites the body, and a

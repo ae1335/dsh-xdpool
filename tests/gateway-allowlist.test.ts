@@ -158,12 +158,21 @@ describe('the LAN completion', () => {
   it.each([
     ['no model field at all', '{"messages":[]}'],
     ['an empty model', '{"model":"","messages":[]}'],
-    ['a body that is not JSON', 'not json'],
   ])('refuses a LAN request with %s', async (_label, body) => {
     // "Not listed" is not a licence to serve everything: a caller that omits the
     // model has named nothing that the allowlist could have approved.
     const gatewaySubject = await gateway(['buddy:hy3'])
     expect((await gatewaySubject.askRaw(body, true)).status).toBe(403)
+    expect(gatewaySubject.upstream).toEqual([])
+  })
+
+  it('answers 400 for a body that is not JSON, before the allowlist can see it', async () => {
+    // An unparseable body cannot even name a model, so it is rejected as a
+    // malformed request (400) ahead of the model-not-shared (403) check — a
+    // caller sending garbage is not being denied a specific model, their request
+    // is invalid on its face. Both orders keep upstream untouched.
+    const gatewaySubject = await gateway(['buddy:hy3'])
+    expect((await gatewaySubject.askRaw('not json', true)).status).toBe(400)
     expect(gatewaySubject.upstream).toEqual([])
   })
 
