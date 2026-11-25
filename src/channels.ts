@@ -130,7 +130,7 @@ export interface ChannelDescriptor {
    * shape of that balance is not ours to invent — codearts returns a bare
    * number, cline returns US dollars, zcode returns token buckets and gemini
    * returns quota percentages — so `unit` says which of those the user is
-   * looking at rather than assuming one currency for thirteen vendors.
+   * looking at rather than assuming one currency for many vendors.
    *
    * `claim` is `credits.claimAll` (daily check-in), `status` is
    * `credits.status` (today's claim badge). Both are absent for vendors whose

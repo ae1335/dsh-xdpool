@@ -159,7 +159,7 @@ export function channelIcon(id: string): string | undefined {
     于是背景图永远是 none。
 
     现在只有真存在的才用变量，其余返回 undefined，让调用方去查
-    provider-icons 的 76 家美术。
+    provider-icons 的 77 家美术。
   */
   return CSS_ICON_NAMES.has(cssName) ? `css:--icon-${cssName}` : undefined
 }

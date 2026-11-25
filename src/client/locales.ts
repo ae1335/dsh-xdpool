@@ -1134,7 +1134,7 @@ export const zh: Record<XdPoolSettingsKey, string> = {
   'route.missingHint': '链原样保留着这些成员，但调不通——你以为自己下的指令被照做了，其实是别的模型在答。',
   'route.chainDisabled': '已停用',
   'route.strategyLabel': '{strategy} · {members}',
-  // 扫码登录页（22 家渠道）
+  // 扫码登录页（24 家渠道）
   'chan.tab': '扫码登录',
   'chan.title': '扫码登录',
   'chan.note': '每个渠道点「登录」都会打开一个浏览器窗口，登录完成后自动接上。凭据只存在本机，不会上传。',
