@@ -42,3 +42,8 @@ _backup-lib-*/
 # future patches will use; the notes file is listed so nobody re-adds it either.
 pack.js.patched-local-*.bak
 FIX-*-NOTES.md
+
+# 根目录一次性迁移/备份脚本与临时构建日志（git rm 后防回潮）
+_*.mjs
+_bak-quick/
+_quick-log/

@@ -32,13 +32,13 @@ English | [中文](./README.md)
 
 It started as one thing: every account you've signed into the WorkBuddy desktop app, merged into one auto-failing-over pool. An account gets rate-limited or runs out of credits, and the request moves to the next one that works. No picking favourites, no manual import.
 
-Then it grew into six pages. Beyond the account pool: sign in to thirteen vendors' free models by web or QR, aggregate **76 vendors'** free quotas into one lane, read a usage ledger, chain models together, and expose the pool as a local OpenAI-compatible gateway.
+Then it grew into seven pages. Beyond the account pool: sign in to 24 vendors' free models by web or QR, aggregate **77 vendors'** free quotas into one lane, read a usage ledger, chain models together, and expose the pool as a local OpenAI-compatible gateway.
 
 | Page | What it does |
 | --- | --- |
 | **Account pool** | Local WorkBuddy accounts, pool health, live usage, points automation |
 | **Login channels** | Thirteen vendors that sign in by web or QR — once, and their free models join the picker |
-| **Aggregate** | 76 vendors' free quotas into one pool (none on by default; a vendor lights up when it has a key) |
+| **Aggregate** | 77 vendors' free quotas into one pool (none on by default; a vendor lights up when it has a key) |
 | **Dashboard** | Today's turns, calls, failures, failover rescues, tokens, cache hits, speed |
 | **Routing** | Chain several models, in order or round-robin |
 | **Gateway** | Expose the pool as a local OpenAI-compatible endpoint, optionally to your LAN |
@@ -56,13 +56,13 @@ Then it grew into six pages. Beyond the account pool: sign in to thirteen vendor
 
 ![Account pool: the brand bar shows XD Pool with its version, seven page tabs, the usage panel sits at the very top, and below it the WorkBuddy CN account card with its connected badge](assets/account-pool.png)
 
-**Login channels (thirteen vendors that sign in by web or QR — sign in once and their free models are yours)**
+**Login channels (24 vendors that sign in by web or QR — sign in once and their free models are yours)**
 
-![Login channels: the thirteen-vendor list, with CodeArts Huawei Cloud and WorkBuddy CN/global each carrying their own description and sign-in button](assets/login-channels.png)
+![Login channels: the 24-vendor list, with CodeArts Huawei Cloud and WorkBuddy CN/global each carrying their own description and sign-in button](assets/login-channels.png)
 
-**Aggregate channels (every vendor's free quota wired into one model pool, 76 vendors filterable by category)**
+**Aggregate channels (every vendor's free quota wired into one model pool, 77 vendors filterable by category)**
 
-![Aggregate channels: the aggregate switch, a search box, and the category filters — all 76 / API key 60 / free 1 / has free quota 10 / local 3 / needs authorization 2](assets/aggregate-channels.png)
+![Aggregate channels: the aggregate switch, a search box, and the category filters — all 77 / API key 61 / free 1 / has free quota 11 / local 3 / needs authorization 2](assets/aggregate-channels.png)
 
 **Account credit detail (a pool account: credit packages, streak, today's check-in, the credit reserve)**
 
@@ -273,7 +273,7 @@ xdpool:
 
 ## Known limitations
 
-- **The WorkBuddy sign-in itself still goes through the desktop app**: XD Pool can launch QR sign-in for its own thirteen login channels, but WorkBuddy's own token is minted by the desktop app's Tencent SSO and bound to the device — the pool will not sign you in to WorkBuddy. Adding an account = signing in on the desktop app; XD Pool absorbs it.
+- **The WorkBuddy sign-in itself still goes through the desktop app**: XD Pool can launch QR sign-in for its own 24 login channels, but WorkBuddy's own token is minted by the desktop app's Tencent SSO and bound to the device — the pool will not sign you in to WorkBuddy. Adding an account = signing in on the desktop app; XD Pool absorbs it.
 
 - **A few automation tasks are deliberately not implemented**
   - `Expert_Philanthropy` (charity expert): requires a real donation; there is no way around it.
