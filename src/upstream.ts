@@ -12,7 +12,7 @@
  * @module dsh-xdpool/upstream
  */
 
-import type { WorkBuddyCredential } from './accounts.ts'
+import type { WorkBuddyCredential } from './accounts-types.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import type { MarketExpert } from './task-events.ts'
 import type { ChatMessage } from './context-budget.ts'

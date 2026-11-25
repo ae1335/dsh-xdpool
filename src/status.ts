@@ -8,7 +8,8 @@
  * @module dsh-xdpool/status
  */
 
-import type { WorkBuddyAccount, WorkBuddyAccountPool } from './accounts.ts'
+import type { WorkBuddyAccount } from './accounts-types.ts'
+import type { WorkBuddyAccountPool } from './accounts.ts'
 import type { WorkBuddyCatalog } from './catalog.ts'
 import type { WorkBuddyCredits, WorkBuddyUpstreamClient } from './upstream.ts'
 

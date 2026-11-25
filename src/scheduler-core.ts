@@ -5,7 +5,7 @@
  * No file IO and no module-level mutable state.
  */
 
-import type { WorkBuddyAccount } from './accounts'
+import type { WorkBuddyAccount } from './accounts-types.ts'
 import { regionOf } from './upstream'
 import type { WorkBuddyRegion } from './upstream'
 import { LIGHTHOUSE_EXPERT_ID } from './task-events.ts'

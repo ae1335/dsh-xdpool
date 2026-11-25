@@ -13,7 +13,7 @@
  * is allowed to be async and to call the upstream.
  */
 
-import type { WorkBuddyCredential } from './accounts'
+import type { WorkBuddyCredential } from './accounts-types.ts'
 import { desktopChatEvents } from './upstream'
 
 /**

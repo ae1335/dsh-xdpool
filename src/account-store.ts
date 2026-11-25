@@ -15,7 +15,7 @@
 
 import { readFile, rename } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { WorkBuddyAccount, WorkBuddyCredential } from './accounts.ts'
+import type { WorkBuddyAccount, WorkBuddyCredential } from './accounts-types.ts'
 import { ensureSecretDir, writeSecretFile } from './file-perms.ts'
 import { PLUGIN_DATA_DIR_NAME, dshHome } from './ignored.ts'
 

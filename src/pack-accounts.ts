@@ -19,7 +19,7 @@
  * @module dsh-xdpool/pack-accounts
  */
 
-import type { WorkBuddyCredential } from './accounts.ts'
+import type { WorkBuddyCredential } from './accounts-types.ts'
 
 /**
  * Channel ids whose accounts this plugin serves itself.

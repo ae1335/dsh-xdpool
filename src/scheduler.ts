@@ -22,7 +22,8 @@
  * gateway has no growth/task system, so calling it would only produce noise.
  */
 
-import type { WorkBuddyAccount, WorkBuddyAccountPool, WorkBuddyCredential } from './accounts'
+import type { WorkBuddyAccount, WorkBuddyCredential } from './accounts-types.ts'
+import type { WorkBuddyAccountPool } from './accounts'
 import { isAlreadyCheckin, isNoCompensation } from './upstream'
 import type { WorkBuddyTask, WorkBuddyUpstreamClient } from './upstream'
 import { APPEARANCE_THEME_KEY, LIGHTHOUSE_EXPERT_ID, appearanceChain, automationChain, buddyAppChain, canvasChain, chatChain, expertActualUseEvent, expertChatEvents, expertFromTask, expertIdFromJumpUrl, expertSummonEvents, libraryReadChain, playbookChain, skillChain, templateChains } from './task-events.ts'
