@@ -1727,21 +1727,40 @@ function canonicalJson(value: unknown): string {
      * A closure rather than a direct reference because the routes are mounted before the
      * adapters exist, and the value they need is only known afterwards.
      */
-    registerAstudioRoutes(webCtx, { adopted: () => { ownAdapterRefresherSlot.current?.() }, trustedHosts })
-    registerAccioRoutes(webCtx, { adopted: () => { ownAdapterRefresherSlot.current?.() }, trustedHosts })
-    registerMonkeycodeRoutes(webCtx, { adopted: () => { ownAdapterRefresherSlot.current?.() }, trustedHosts })
-    registerBaizhiRoutes(webCtx, { adopted: () => { ownAdapterRefresherSlot.current?.() }, trustedHosts })
-    registerAutoclawRoutes(webCtx, { adopted: () => { ownAdapterRefresherSlot.current?.() }, trustedHosts })
-    registerMagicrewRoutes(webCtx, { adopted: () => { ownAdapterRefresherSlot.current?.() }, trustedHosts })
-    registerMarvisRoutes(webCtx, {
-      accounts: async () => (await readMarvisAccounts()).map(account => ({
-        openid: account.openid,
-        ...(account.nickname === undefined ? {} : { nickname: account.nickname }),
-        loginType: account.loginType,
-      })),
-      adopted: () => {},
-      trustedHosts,
-    })
+    /**
+     * 渠道路由逐段兜底：任何一家注册失败都不连坐后面的路由。
+     *
+     * 2026-11 的教训：magicrew 曾因路由没挂上 fiber 生命周期，热重载后旧路由
+     * 留在宿主 webserver 的表里，新实例一注册就抛「duplicate exact route」——
+     * 而这段顺序执行的裸调用被那个异常打断，marvis、豆包、使用方式、状态路由
+     * 全部跟着 404。现在每家独立 try/catch + startup note，失败只影响这一家。
+     */
+    const adoptedChannel = (): void => { ownAdapterRefresherSlot.current?.() }
+    const channelMounts: ReadonlyArray<readonly [name: string, mount: () => void]> = [
+      ['astudio', () => registerAstudioRoutes(webCtx, { adopted: adoptedChannel, trustedHosts })],
+      ['accio', () => registerAccioRoutes(webCtx, { adopted: adoptedChannel, trustedHosts })],
+      ['monkeycode', () => registerMonkeycodeRoutes(webCtx, { adopted: adoptedChannel, trustedHosts })],
+      ['baizhi', () => registerBaizhiRoutes(webCtx, { adopted: adoptedChannel, trustedHosts })],
+      ['autoclaw', () => registerAutoclawRoutes(webCtx, { adopted: adoptedChannel, trustedHosts })],
+      ['magicrew', () => registerMagicrewRoutes(webCtx, { adopted: adoptedChannel, trustedHosts })],
+      ['marvis', () => registerMarvisRoutes(webCtx, {
+        accounts: async () => (await readMarvisAccounts()).map(account => ({
+          openid: account.openid,
+          ...(account.nickname === undefined ? {} : { nickname: account.nickname }),
+          loginType: account.loginType,
+        })),
+        adopted: () => {},
+        trustedHosts,
+      })],
+    ]
+    for (const [channel, mount] of channelMounts) {
+      try {
+        mount()
+        recordStartupNote(`routes: ${channel} ok`)
+      } catch (error: unknown) {
+        recordStartupNote(`routes: ${channel} FAILED: ${describeError(error)}`)
+      }
+    }
     /**
      * 探针：确认 webServer 这条注入真的进来了。
      *

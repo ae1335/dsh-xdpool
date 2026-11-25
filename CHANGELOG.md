@@ -1,6 +1,22 @@
 # Changelog
 本项目的所有重要变更都会记录在此文件。
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+## 3.0.9 — 超级麦吉路由挂上生命周期，热重载不再报重复路由
+
+### 热重载后 `duplicate exact route "/plugins/dsh-xdpool/magicrew/login"` 修掉了
+
+超级麦吉（magicrew）两站的路由是唯一没有挂进 fiber 生命周期的渠道：其余渠道
+（astudio / accio / monkeycode / baizhi / autoclaw / marvis / doubao）都把注册包在
+`ctx.effect` 里并返回清理函数，插件被宿主热重载时路由跟着摘除；magicrew 却把合成
+disposer 交给调用方，而调用方把它丢了。于是每次热重载，旧实例的 10 条路由都留在
+宿主 webserver 的路由表里，新实例一注册就撞「duplicate exact route」。
+
+那个异常还会打断 inject 回调里排在 magicrew 后面的注册 —— marvis、豆包、账号使用
+方式、状态类路由全部连坐 404（日志里表现为回调再没走到 `routes: webCtx callback
+entered` 之后的任何一步）。现在 magicrew 与其他渠道一致地用 `ctx.effect` 挂载；并且
+七家渠道路由各自独立 try/catch，任何一家失败只影响自己，启动日志会记下
+`routes: <渠道> FAILED` 而不是让整段回调断掉。
+
 ## 3.0.8 — 账号表并发写不再因临时文件打架而丢失
 
 ### 账号表持久化在并发写时不再报 ENOENT

@@ -95,8 +95,12 @@ describe('the sign-in refresh', () => {
 
   it('wires every paste channel to the refresher', () => {
     // A channel whose `adopted` is a no-op is a channel that needs a restart to appear.
-    const wired = [...host.matchAll(/adopted: \(\) => \{ ownAdapterRefresherSlot\.current\?\.\(\) \}/gu)]
-    expect(wired.length, 'one per own-channel route group').toBeGreaterThanOrEqual(5)
+    // The seven own-channel route groups share one `adoptedChannel` closure; the guard
+    // covers both halves: the closure itself must call the refresher, and every group
+    // (except Marvis, whose adopted is deliberately a no-op) must use it.
+    expect(host).toContain("const adoptedChannel = (): void => { ownAdapterRefresherSlot.current?.() }")
+    const wired = [...host.matchAll(/adopted: adoptedChannel\b/gu)]
+    expect(wired.length, 'one per own-channel route group').toBeGreaterThanOrEqual(6)
   })
 
   it('resets the slot before building fresh adapters', () => {

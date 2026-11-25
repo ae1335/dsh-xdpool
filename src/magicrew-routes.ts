@@ -383,24 +383,36 @@ function safeParse(text: string): unknown {
   return undefined
 }
 
-/** 挂两站的全部路由。 */
-export function registerMagicrewRoutes(ctx: Context, deps: MagicrewRouteOptions): () => void {
-  const disposeCn = mountSite(ctx, MAGICREW_CN, {
-    login: POOL_MAGICREW_CN_LOGIN_PATH,
-    session: POOL_MAGICREW_CN_SESSION_PATH,
-    wallet: POOL_MAGICREW_CN_WALLET_PATH,
-    checkin: POOL_MAGICREW_CN_CHECKIN_PATH,
-    accounts: POOL_MAGICREW_CN_ACCOUNTS_PATH,
-  }, deps)
-  const disposeIntl = mountSite(ctx, MAGICREW_INTL, {
-    login: POOL_MAGICREW_INTL_LOGIN_PATH,
-    session: POOL_MAGICREW_INTL_SESSION_PATH,
-    wallet: POOL_MAGICREW_INTL_WALLET_PATH,
-    checkin: POOL_MAGICREW_INTL_CHECKIN_PATH,
-    accounts: POOL_MAGICREW_INTL_ACCOUNTS_PATH,
-  }, deps)
-  return () => {
-    disposeCn()
-    disposeIntl()
-  }
+/**
+ * 挂两站的全部路由。
+ *
+ * 必须包在 `ctx.effect` 里：其余渠道（astudio / accio / monkeycode / baizhi /
+ * autoclaw / marvis / doubao）都把自己的路由挂进 fiber 生命周期，插件被宿主
+ * 热重载时路由随之摘除；这里曾经把合成 disposer 返回给调用方，而调用方把它
+ * 丢了 —— 于是每次热重载旧路由都留在宿主 webserver 的表里，新实例一注册
+ * 就撞 `webserver: duplicate exact route`，还会把回调里排在后面的 marvis /
+ * doubao / 使用方式 / 状态路由全部连坐断掉。effect 返回的清理函数会在 fiber
+ * 卸载时自动执行，与其他渠道一致。
+ */
+export function registerMagicrewRoutes(ctx: Context, deps: MagicrewRouteOptions): void {
+  ctx.effect(() => {
+    const disposeCn = mountSite(ctx, MAGICREW_CN, {
+      login: POOL_MAGICREW_CN_LOGIN_PATH,
+      session: POOL_MAGICREW_CN_SESSION_PATH,
+      wallet: POOL_MAGICREW_CN_WALLET_PATH,
+      checkin: POOL_MAGICREW_CN_CHECKIN_PATH,
+      accounts: POOL_MAGICREW_CN_ACCOUNTS_PATH,
+    }, deps)
+    const disposeIntl = mountSite(ctx, MAGICREW_INTL, {
+      login: POOL_MAGICREW_INTL_LOGIN_PATH,
+      session: POOL_MAGICREW_INTL_SESSION_PATH,
+      wallet: POOL_MAGICREW_INTL_WALLET_PATH,
+      checkin: POOL_MAGICREW_INTL_CHECKIN_PATH,
+      accounts: POOL_MAGICREW_INTL_ACCOUNTS_PATH,
+    }, deps)
+    return () => {
+      disposeCn()
+      disposeIntl()
+    }
+  })
 }
