@@ -849,7 +849,11 @@ export declare class WorkBuddyUpstreamClient {
   }>;
 }
 //#endregion
-//#region src/accounts.d.ts
+//#region src/accounts-types.d.ts
+/**
+ * Types shared by the WorkBuddy account pool: credentials, accounts, and
+ * the pool options. Type-only module: no runtime code lives here.
+ */
 /** Minimal upstream surface the pool needs to refresh a token (no circular import). */
 interface TokenRefresher {
   refreshToken(credential: WorkBuddyCredential): Promise<{
@@ -894,11 +898,6 @@ interface ExpiryReading {
   /** True when the reading is older than {@link EXPIRY_READING_TTL_MS}. */
   stale: boolean;
 }
-/** Live auth file name the WorkBuddy desktop app writes. */
-export declare const WORKBUDDY_LIVE_FILENAME = "workbuddy-desktop.info";
-/** Snapshot files left behind by previous logins share this prefix. */
-/** Env override for the auth file or its directory. */
-export declare const WORKBUDDY_AUTH_FILE_ENV = "WORKBUDDY_AUTH_FILE";
 /** One parsed WorkBuddy credential. */
 /**
  * A credential file the pool could not turn into an account.
@@ -982,25 +981,6 @@ interface WorkBuddyAccount {
    */
   credentialDeadUntilMs?: number;
 }
-/**
- * Platform-default directories holding the desktop app's auth files.
- * Windows probes Local before Roaming; a redirected profile still resolves
- * through the env location.
- */
-export declare function defaultDesktopAuthDirs(platform?: NodeJS.Platform, home?: string, env?: NodeJS.ProcessEnv): string[];
-/**
- * Parse a WorkBuddy auth document. Accepts the nested desktop shape
- * `{"auth":{...},"account":{...}}` and the flat panel shape; returns undefined
- * when there is no usable access token.
- *
- * `decrypt` opens the desktop app's `$wbEncrypted` field wrapper (5.6.0+, both
- * platforms). Absent means "plain-string builds only", which is what every
- * caller without an at-rest key should pass.
- */
-export declare function parseWorkBuddyAuth(text: string, sourcePath: string, decrypt?: (field: unknown) => string): WorkBuddyCredential | undefined;
-export declare function workbuddyAccountId(credential: Pick<WorkBuddyCredential, 'uin' | 'uid' | 'nickname'>): string;
-/** Every directory the pool should scan, in probe order. */
-export declare function candidateAuthDirs(env?: NodeJS.ProcessEnv): string[];
 /** How the pool chooses which account serves the next request. */
 type AccountDistribution = 'priority' | 'round-robin' | 'balanced' | 'sticky' | 'expiry';
 interface AccountPoolOptions {
@@ -1075,6 +1055,34 @@ interface AccountPoolOptions {
    */
   persistent?: boolean;
 }
+//#endregion
+//#region src/accounts-core.d.ts
+/** Live auth file name the WorkBuddy desktop app writes. */
+export declare const WORKBUDDY_LIVE_FILENAME = "workbuddy-desktop.info";
+/** Snapshot files left behind by previous logins share this prefix. */
+/** Env override for the auth file or its directory. */
+export declare const WORKBUDDY_AUTH_FILE_ENV = "WORKBUDDY_AUTH_FILE";
+/**
+ * Parse a WorkBuddy auth document. Accepts the nested desktop shape
+ * `{"auth":{...},"account":{...}}` and the flat panel shape; returns undefined
+ * when there is no usable access token.
+ *
+ * `decrypt` opens the desktop app's `$wbEncrypted` field wrapper (5.6.0+, both
+ * platforms). Absent means "plain-string builds only", which is what every
+ * caller without an at-rest key should pass.
+ */
+export declare function parseWorkBuddyAuth(text: string, sourcePath: string, decrypt?: (field: unknown) => string): WorkBuddyCredential | undefined;
+export declare function workbuddyAccountId(credential: Pick<WorkBuddyCredential, 'uin' | 'uid' | 'nickname'>): string;
+//#endregion
+//#region src/accounts.d.ts
+/**
+ * Platform-default directories holding the desktop app's auth files.
+ * Windows probes Local before Roaming; a redirected profile still resolves
+ * through the env location.
+ */
+export declare function defaultDesktopAuthDirs(platform?: NodeJS.Platform, home?: string, env?: NodeJS.ProcessEnv): string[];
+/** Every directory the pool should scan, in probe order. */
+export declare function candidateAuthDirs(env?: NodeJS.ProcessEnv): string[];
 export declare class WorkBuddyAccountPool {
   private readonly logger;
   private authDirs;
