@@ -4,3 +4,7 @@ packages:
 allowBuilds:
   '@google/genai': false
   protobufjs: false
+
+nodeLinker: hoisted
+autoInstallPeers: false
+strictPeerDependencies: false
