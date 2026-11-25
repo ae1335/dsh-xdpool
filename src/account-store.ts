@@ -13,11 +13,13 @@
  * @module dsh-xdpool/account-store
  */
 
-import { readFile, rename } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { readFile, rename, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { WorkBuddyAccount, WorkBuddyCredential } from './accounts-types.ts'
 import { ensureSecretDir, writeSecretFile } from './file-perms.ts'
 import { PLUGIN_DATA_DIR_NAME, dshHome } from './ignored.ts'
+import { withStoreLock } from './store-lock.ts'
 
 /** File name of the durable account list, inside the plugin data directory. */
 export const ACCOUNTS_FILE_NAME = 'accounts.json'
@@ -102,8 +104,27 @@ export async function loadStoredAccounts(path: string): Promise<StoredAccount[]>
 }
 
 /**
- * Atomically write the durable list: `${path}.tmp` first, then rename. A crash
- * mid-write leaves the previous generation intact.
+ * Atomically write the durable list: a temp file beside the store first, then
+ * rename. A crash mid-write leaves the previous generation intact.
+ *
+ * Overlapping saves are ordinary, so two things keep them off each other:
+ *
+ *   - `withStoreLock(path)` — one writer at a time per store, in this process.
+ *     `scan()` has no in-flight guard and is event-driven (a status refresh, a card
+ *     refresh, the rescan after a login), and each of them ends here.
+ *   - a temp name of its own for every write. The CLI is a second process: every
+ *     `dsh-xdpool` command goes through `createCore()`, which makes that pool
+ *     persistent as well, so it writes this very file while the plugin runs. No
+ *     in-process lock can order two processes.
+ *
+ * With neither, every save wrote the same `${path}.tmp`: the first rename took the
+ * file and the next one had no source left (ENOENT; EPERM for a share of them on
+ * Windows). `scan()` reports that as "could not persist the account store", and
+ * that scan's list never reaches disk.
+ *
+ * A temp file is removed when its write or rename fails. Only a process killed
+ * mid-write can strand one, and it is never read back: the pool scans `.info`
+ * files only.
  */
 export async function saveStoredAccounts(path: string, accounts: readonly WorkBuddyAccount[]): Promise<void> {
   const stored: StoredAccount[] = accounts.map(account => ({
@@ -118,8 +139,17 @@ export async function saveStoredAccounts(path: string, accounts: readonly WorkBu
   // every other user on the host). The mode is applied when the TEMP file is
   // created, so the rename carries it to the destination — no window where the
   // real path exists with the old permissions.
-  await ensureSecretDir(dirname(path))
-  const tmp = `${path}.tmp`
-  await writeSecretFile(tmp, document)
-  await rename(tmp, path)
+  await withStoreLock(path, async () => {
+    await ensureSecretDir(dirname(path))
+    const tmp = `${path}.${String(process.pid)}.${randomBytes(6).toString('hex')}.tmp`
+    try {
+      await writeSecretFile(tmp, document)
+      await rename(tmp, path)
+    } catch (error) {
+      // The previous generation is still at `path`; a half-written temp file is
+      // nobody's save and must not be left beside it.
+      await unlink(tmp).catch(() => undefined)
+      throw error
+    }
+  })
 }

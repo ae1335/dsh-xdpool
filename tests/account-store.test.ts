@@ -23,14 +23,28 @@
  * that NO code path ever read (`lib/bin.js` wrote `<md5>.json` into
  * `~/.dsh/.xdpool/`, `scan()` never looked there). The snapshot directory is
  * now a scan source, and the plugin's own state files in it are excluded.
+ *
+ * A third: overlapping saves. `scan()` is event-driven and has no in-flight
+ * guard, so two of them overlap in ordinary use — and every save wrote the same
+ * `${path}.tmp`. The first rename took that file and the next failed with ENOENT
+ * ("could not persist the account store"). The store now keeps one writer at a
+ * time and gives each write a temp file of its own.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { WorkBuddyAccount } from '../src/accounts-types.ts'
 import { WorkBuddyAccountPool, workbuddyAccountId } from '../src/accounts.ts'
-import { ACCOUNTS_FILE_NAME, accountStorePath, isStateFile, NON_SNAPSHOT_FILES } from '../src/account-store.ts'
+import {
+  ACCOUNTS_FILE_NAME,
+  accountStorePath,
+  isStateFile,
+  loadStoredAccounts,
+  NON_SNAPSHOT_FILES,
+  saveStoredAccounts,
+} from '../src/account-store.ts'
 
 /** A raw desktop auth document, the shape older desktop builds write. */
 function plainCredential(name: string, token = `token-${name}`): string {
@@ -64,6 +78,21 @@ function parsedCredential(name: string, token = `token-${name}`) {
     domain: 'www.workbuddy.cn',
     sourcePath: `stored:${name}`,
   }
+}
+
+/**
+ * Pool rows as `scan()` builds them. Every row is tagged with its `writer`, so a
+ * document read back from the store can be traced to the one save that wrote it.
+ */
+function poolAccounts(writer: number, count: number): WorkBuddyAccount[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `w${writer}-${index}`,
+    label: `writer-${writer}-${index}`,
+    credential: parsedCredential(`w${writer}-${index}`),
+    cooldownUntilMs: 0,
+    modelCooldowns: {},
+    rateLimitHits: 0,
+  }))
 }
 
 /** Temp home directory standing in for `~/.dsh`, restored after each test. */
@@ -227,10 +256,56 @@ describe('the durable account store', () => {
     expect(existsSync(storePath)).toBe(false)
     await new WorkBuddyAccountPool({ authDirs: [authDir], persistent: true }).scan()
     expect(existsSync(storePath)).toBe(true)
-    expect(existsSync(`${storePath}.tmp`)).toBe(false)
+    // Nothing half-written is left beside it, whichever name its temp file had.
+    expect(readdirSync(dirname(storePath)).filter(name => name.endsWith('.tmp'))).toEqual([])
     const round = JSON.parse(await import('node:fs/promises').then(fs => fs.readFile(storePath, 'utf8')))
     expect(round.accounts).toHaveLength(1)
     expect(round.accounts[0].credential.accessToken).toBe('token-carol')
+  })
+
+  it('overlapping saves of one store all land, none of them fighting over a temp file', async () => {
+    // The report: "could not persist the account store" with ENOENT on rename.
+    // `scan()` has no in-flight guard and is event-driven, so two scans overlap in
+    // ordinary use — and every save wrote the same `${path}.tmp`. The first rename
+    // took that file; the next rename had no source left.
+    const home = tempHome()
+    cleanups.push(() => rmSync(home, { recursive: true, force: true }))
+    const storePath = accountStorePath()
+    const writers = 24
+    const rows = 12
+
+    const results = await Promise.allSettled(
+      Array.from({ length: writers }, (_, writer) => saveStoredAccounts(storePath, poolAccounts(writer, rows))),
+    )
+    expect(results.filter(result => result.status === 'rejected')).toEqual([])
+
+    // ONE writer's list, whole and in order — not a mix of two, not the prefix of
+    // a temp file that another save renamed into place while it was being written.
+    const loaded = await loadStoredAccounts(storePath)
+    const owners = new Set(loaded.map(account => account.id.slice(0, account.id.indexOf('-'))))
+    expect(owners.size).toBe(1)
+    expect(loaded.map(account => account.id.slice(account.id.indexOf('-') + 1)))
+      .toEqual(Array.from({ length: rows }, (_, index) => String(index)))
+    expect(readdirSync(dirname(storePath)).filter(name => name.endsWith('.tmp'))).toEqual([])
+  })
+
+  it('a save that fails leaves no temp file behind', async () => {
+    // The temp file carries the same tokens as the store. A rename that failed
+    // used to leave it sitting there: nobody's save, and the one file in this
+    // directory no code path ever cleans up.
+    const home = tempHome()
+    cleanups.push(() => rmSync(home, { recursive: true, force: true }))
+    const storePath = accountStorePath()
+    // A non-empty DIRECTORY where the store belongs: no platform renames a file
+    // over that, so what fails is the rename and nothing before it.
+    mkdirSync(storePath, { recursive: true })
+    writeFileSync(join(storePath, 'occupied'), 'not a store')
+
+    await expect(saveStoredAccounts(storePath, poolAccounts(0, 1))).rejects.toThrow()
+
+    expect(readdirSync(dirname(storePath)).filter(name => name.endsWith('.tmp'))).toEqual([])
+    // And the stand-in is untouched.
+    expect(readdirSync(storePath)).toEqual(['occupied'])
   })
 
   it('a corrupt store yields an empty seed, not a broken pool', async () => {
