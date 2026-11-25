@@ -3713,24 +3713,7 @@ interface WorkBuddyAdapter {
  */
 export declare function createWorkBuddyAdapter(options: WorkBuddyAdapterOptions): WorkBuddyAdapter;
 //#endregion
-//#region src/scheduler.d.ts
-/** How often the loop wakes to look for a due job. */
-/**
- * How long to wait for event scoring to land before re-reading the task list.
- *
- * Scoring is asynchronous on the upstream side, so an immediate re-read still
- * shows the old progress and the claim pass would skip a task that is in fact
- * now claimable. Measured: the chain is reflected by about eight seconds.
- */
-export declare const EVENT_SCORE_WAIT_MS = 9000;
-export declare const AUTOMATION_TICK_MS = 60000;
-/** Which jobs the automation runs, and when. */
-/**
- * The persisted daily earnings ledger.
- *
- * `date` is the local day the counters belong to: a ledger from a previous day
- * is discarded on load rather than carried forward as "today".
- */
+//#region src/scheduler-types.d.ts
 interface AutomationLedger {
   date: string;
   accounts: Record<string, AutomationAccountEarnings>;
@@ -3770,12 +3753,10 @@ interface AutomationOptions {
   loadEarnings?: () => AutomationLedger | undefined;
   saveEarnings?: (ledger: AutomationLedger) => void;
 }
-/** Logger surface, kept structural so any host logger fits. */
 interface SchedulerLogger {
   info?(...args: unknown[]): void;
   warn?(...args: unknown[]): void;
 }
-/** One job's last-run record, surfaced on the status document. */
 interface AutomationJobState {
   /** `YYYY-MM-DD` of the last completed run, or undefined if it never ran. */
   lastRunDate?: string;
@@ -3859,13 +3840,6 @@ interface AutomationJobState {
   progress?: string;
   message?: string;
 }
-/**
- * What the automation earned for ONE account today.
- *
- * Reset at the local day boundary alongside the per-job "already ran today"
- * guard, so the card shows today rather than a running total that never
- * answers "did it do anything for this account recently".
- */
 interface AutomationAccountEarnings {
   /** Credits the automation claimed from the task centre today. */
   credit: number;
@@ -3896,7 +3870,6 @@ interface AutomationAccountEarnings {
   /** Local date the counters belong to. */
   date: string;
 }
-/** What ONE account gained during a single run. */
 interface AutomationAccountGain {
   credit: number;
   energy: number;
@@ -3906,7 +3879,6 @@ interface AutomationAccountGain {
   travelCredit: number;
   compensationCredit: number;
 }
-/** Totals from running the whole ordered pass at once. */
 interface AutomationRunSummary {
   /** How many jobs actually ran (a job with no hour is skipped). */
   jobsRun: number;
@@ -3923,7 +3895,6 @@ interface AutomationRunSummary {
    */
   accounts: Readonly<Record<string, AutomationAccountGain>>;
 }
-/** Automation snapshot for the status document and the card. */
 interface AutomationStatus {
   enabled: boolean;
   /** Whether the loop is running. */
@@ -3959,30 +3930,17 @@ interface AutomationStatus {
    */
   runInProgress: boolean;
 }
-/** The three plus one job kinds, in a stable order. */
 type AutomationJobKind = 'checkin' | 'tasks' | 'report' | 'streak' | 'travel' | 'compensation';
-/** The jobs in the order a tick runs them: report before tasks, always. */
+//#endregion
+//#region src/scheduler-core.d.ts
+export declare const EVENT_SCORE_WAIT_MS = 9000;
+export declare const AUTOMATION_TICK_MS = 60000;
 export declare const AUTOMATION_JOB_KINDS: readonly AutomationJobKind[];
-/** Reject anything that is not a job kind, so a route cannot name an unknown job. */
 export declare function isAutomationJobKind(value: unknown): value is AutomationJobKind;
 export declare function dayKey(date: Date, timeZone?: string): string;
-/**
- * Whether `now`'s local hour is one of `hours`.
- *
- * The reference panel computes a `nextFire` instant and sleeps until it; this
- * loop instead wakes every minute and asks "is any job due now". Both fire at
- * the top of a configured hour, but the polling form cannot miss a slot to a
- * suspended process — a laptop that slept through 10:00 still runs the job the
- * moment it wakes, on the same day.
- */
 export declare function isFireHour(now: Date, hours: readonly number[]): boolean;
-/**
- * The points automation.
- *
- * Owns a single timer loop. Construction is inert — nothing runs until
- * {@link start}, and {@link stop} is idempotent so a plugin teardown that fires
- * twice is harmless.
- */
+//#endregion
+//#region src/scheduler.d.ts
 export declare class WorkBuddyScheduler {
   private readonly pool;
   private readonly client;

@@ -20,6 +20,9 @@ import { readFileSync } from 'node:fs'
 import { expertFromTask, expertIdFromJumpUrl } from '../src/task-events.ts'
 
 const scheduler = readFileSync(new URL('../src/scheduler.ts', import.meta.url), 'utf8')
+// The builder map moved to the pure-helpers module when the scheduler was
+// split; the switch that consumes it stayed with the class.
+const schedulerCore = readFileSync(new URL('../src/scheduler-core.ts', import.meta.url), 'utf8')
 
 /** The exact shape the upstream returned, from the issue's own capture. */
 const REAL = 'https://www.workbuddy.cn/work/launch/?deeplink=workbuddy%3A%2F%2Fexperts%3FexpertId%3Dex_GDl31WahyIH0&buddy_type=workbuddy'
@@ -81,9 +84,9 @@ describe('the chains are wired for the whole family', () => {
     // Membership is the filter: a code absent from the map costs zero upstream
     // calls and silently scores nothing, which is exactly the reported bug.
     for (const [code] of KNOWN) {
-      expect(scheduler, `${code} not in EVENT_CHAIN_BUILDERS`).toMatch(new RegExp(`^\\s{2}${code}: true,$`, 'mu'))
+      expect(schedulerCore, `${code} not in EVENT_CHAIN_BUILDERS`).toMatch(new RegExp(`^\\s{2}${code}: true,$`, 'mu'))
     }
-    expect(scheduler).toMatch(/^\s{2}WorkBuddy_Valorant: true,$/mu)
+    expect(schedulerCore).toMatch(/^\s{2}WorkBuddy_Valorant: true,$/mu)
   })
 
   it('routes them to a builder that resolves the id from the task', () => {
