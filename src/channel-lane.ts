@@ -198,7 +198,12 @@ export function createChannelLane(options: {
         // down. All three read as "nothing to show for this one", which is what
         // the card already says; cached briefly so a client refreshing the
         // picker does not re-pay a known-dead listing on every request.
-        logger?.warn?.(`dsh-xdpool: channel ${channel} listed no models: ${String(error)}`)
+        // "No adapter registered" is expected for channels the user has not
+        // signed into — logging it on every refresh is pure noise.
+        const message = String(error)
+        if (!/no adapter/i.test(message)) {
+          logger?.warn?.(`dsh-xdpool: channel ${channel} listed no models: ${message}`)
+        }
         return [] as readonly ChannelLaneRow[]
       })
     const tracked = pending.then(rows => {

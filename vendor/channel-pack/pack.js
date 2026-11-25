@@ -68698,7 +68698,7 @@ var OPENCODE_CATALOG_TIMEOUT_MS = 8e3;
 var name = "codearts-auth";
 var inject = ["credentials", "commands", "llm"];
 var Config = Schema2.object({
-  providers: Schema2.dict(Schema2.any()).default({}).volatile()
+  providers: Schema2.dict(Schema2.any()).default({})
 });
 function registerProviderSettings(ctx, ...namespaces) {
   const settings = settingsOf(ctx);

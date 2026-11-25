@@ -14,7 +14,7 @@
  */
 
 import { readFile, rename } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { WorkBuddyAccount, WorkBuddyCredential } from './accounts.ts'
 import { ensureSecretDir, writeSecretFile } from './file-perms.ts'
 import { PLUGIN_DATA_DIR_NAME, dshHome } from './ignored.ts'
@@ -118,7 +118,7 @@ export async function saveStoredAccounts(path: string, accounts: readonly WorkBu
   // every other user on the host). The mode is applied when the TEMP file is
   // created, so the rename carries it to the destination — no window where the
   // real path exists with the old permissions.
-  await ensureSecretDir(join(path, '..'))
+  await ensureSecretDir(dirname(path))
   const tmp = `${path}.tmp`
   await writeSecretFile(tmp, document)
   await rename(tmp, path)
