@@ -785,6 +785,9 @@ export class WorkBuddyScheduler {
     // an explicit "do it now", so a second press inside the same hour is a
     // no-op, but it never pretends a scheduled slot ran.
     if (!force && state.lastFiredHour === slotKey(this.now())) return { ...state }
+    // Same lock discipline as `tick`: never start a manual run while a pass
+    // is already in flight, or the two would interleave on the same ledger.
+    if (this.busy) return { ...state }
     this.busy = true
     try {
       // No `consumedSlot`: a manual run does not spend a scheduled candidate.
@@ -826,32 +829,43 @@ export class WorkBuddyScheduler {
   }
 
   async runAll(): Promise<AutomationRunSummary> {
+    // Refuse to interleave with a `tick` already in flight: both move the same
+    // per-account ledger, and stepping in mid-pass would double-run a job.
+    // (`startRunAll`'s `runInFlight` guards two button presses; this guards the
+    // button against the timer.)
+    if (this.busy) {
+      return { jobsRun: 0, okCount: 0, failed: 0, credit: 0, energy: 0, claimed: 0, accounts: {} }
+    }
     const today = dayKey(this.now())
     const before = this.earningsSnapshot()
     let okCount = 0
     let failed = 0
     let jobsRun = 0
-    for (const kind of JOB_KINDS) {
-      // Runs EVERY job, including one whose hour list is empty: the button
-      // is an explicit "do everything now", and a job with no schedule is
-      // still one the user can want executed on demand.
-      //
-      // No `consumedSlot` is passed, deliberately. A manual pass is an EXTRA
-      // run, not a substitute for the schedule: consuming the day's remaining
-      // candidates here would mean one button press cancels today's 21:00 cat
-      // trip. The scheduled hours still fire on their own; this only adds a
-      // run on top. (The trade-off is that a manual pass does not suppress the
-      // next automated one — which is the safer direction, and each job is
-      // idempotent anyway.)
-      jobsRun += 1
-      this.busy = true
-      try {
+    // Hold the busy lock for the WHOLE pass, not per job. Unlocking between
+    // jobs opened a window where the timer's `tick` could step in and interleave
+    // with the manual pass on the same ledger (two passes moving the same
+    // counters at once). One lock for the whole pass matches `tick`'s discipline.
+    this.busy = true
+    try {
+      for (const kind of JOB_KINDS) {
+        // Runs EVERY job, including one whose hour list is empty: the button
+        // is an explicit "do everything now", and a job with no schedule is
+        // still one the user can want executed on demand.
+        //
+        // No `consumedSlot` is passed, deliberately. A manual pass is an EXTRA
+        // run, not a substitute for the schedule: consuming the day's remaining
+        // candidates here would mean one button press cancels today's 21:00 cat
+        // trip. The scheduled hours still fire on their own; this only adds a
+        // run on top. (The trade-off is that a manual pass does not suppress the
+        // next automated one — which is the safer direction, and each job is
+        // idempotent anyway.)
+        jobsRun += 1
         await this.runJob(kind, today)
-      } finally {
-        this.busy = false
+        okCount += this.states[kind].ok
+        failed += this.states[kind].failed
       }
-      okCount += this.states[kind].ok
-      failed += this.states[kind].failed
+    } finally {
+      this.busy = false
     }
     // Diff the ledger against the pre-run snapshot. Summing per-job state
     // would mix one job's counters into another's, and reporting the

@@ -1574,17 +1574,23 @@ function canonicalJson(value: unknown): string {
   })
   ctx.effect(() => () => {
     stopped = true
-    // Before the shim it points at: a relay must not outlive the listener it
-    // forwards to, or it keeps accepting requests it can only answer with 502.
-    void relay.close()
-    void shims.cn.close()
-    void shims.global.close()
     // The scheduler holds a timer; stop it before the shims so a tick in flight
     // cannot reach an upstream client whose base has already gone.
     core.scheduler.stop()
     // Same reason: the Doubao automation holds a timer, and a pass filing a claim after the
     // plugin is gone would report into nothing.
     doubaoAutomation.stop()
+    // Before the shim it points at: a relay must not outlive the listener it
+    // forwards to, or it keeps accepting requests it can only answer with 502.
+    // Best-effort: a rejected close must not surface as an unhandled rejection.
+    void Promise.allSettled([relay.close(), shims.cn.close(), shims.global.close()])
+      .then((results) => {
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            ctx.logger.warn?.('dsh-xdpool: shutdown close failed', result.reason)
+          }
+        }
+      })
   })
   void relay.ready.catch((error: unknown) => {
     ctx.logger.warn(`xdpool relay: startup failed — ${String(error)}`)
