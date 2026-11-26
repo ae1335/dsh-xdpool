@@ -2,7 +2,7 @@
   "name": "dsh-xdpool",
   "displayName": "DSH XD Pool",
   "description": "One DSH model pool for every free quota you have: merge all locally signed-in WorkBuddy accounts with auto-failover, sign in to 24 vendors by QR/web, aggregate 77 external vendors' keys, plus a usage dashboard, model routing, a local OpenAI-compatible gateway and a points-automation suite.",
-  "version": "3.0.9",
+  "version": "3.0.10",
   "license": "MIT",
   "author": "XDTrees",
   "homepage": "https://github.com/XDTrees/dsh-xdpool#readme",
@@ -82,7 +82,7 @@
     "@deepseek-ai/dsh-typert-protocol": "0.1.5-rc.3",
     "@deepseek-ai/dsh-util-crypto": "0.1.5-rc.3",
     "@deepseek-ai/dsh-util-values": "0.1.5-rc.3",
-    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/schemastery": "3.19.0",
     "zod": "4.5.4"
   },
   "devDependencies": {
@@ -105,7 +105,7 @@
     "@deepseek-ai/dsh-session": "0.1.5-rc.2",
     "@deepseek-ai/dsh-settings": "0.1.5-rc.2",
     "@deepseek-ai/dsh-timeout": "0.1.5-rc.2",
-    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/schemastery": "3.19.0",
     "@earendil-works/pi-ai": "0.85.1",
     "@types/node": "^26.4.1",
     "@types/react": "~18.3.31",

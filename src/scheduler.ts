@@ -33,6 +33,22 @@ import type { PoolWebAutomationItem } from './status-paths.ts'
 import { AUTOMATION_ACCOUNT_DELAY_MS, AUTOMATION_TICK_MS, EMPTY_JOB_STATE, EVENT_CHAIN_BUILDERS, EVENT_SCORE_WAIT_MS, EXPERT_SUMMON_GAP_MS, JOB_KINDS, LIGHTHOUSE_EXPERT, dayKey, diffEarnings, eligible, hoursOrDefault, sleep, slotKey, zonedParts } from './scheduler-core.ts'
 import type { AutomationAccountEarnings, AutomationJobKind, AutomationJobState, AutomationLedger, AutomationOptions, AutomationRunSummary, AutomationStatus, JobKind, SchedulerLogger } from './scheduler-types.ts'
 
+/**
+ * 宿主日志管道会把原始 Error 对象序列化成 `{}` —— message 和 stack 都不可枚举，
+ * 传裸 error 进去的 16 个 warn 站点在日志里全是一对空花括号，等于没有诊断信息
+ * （「could not persist automation earnings: {}」就是这么来的）。所有错误日志
+ * 一律先走这里：类型 + message + 栈的头两帧。
+ */
+function errorBrief(error: unknown): string {
+  if (error instanceof Error) {
+    const frames = String(error.stack ?? '').split('\n').slice(1, 3).map(frame => frame.trim()).filter(frame => frame !== '')
+    return frames.length === 0
+      ? `${error.name}: ${error.message}`
+      : `${error.name}: ${error.message} @ ${frames.join(' | ')}`
+  }
+  return String(error)
+}
+
 export class WorkBuddyScheduler {
   private readonly pool: WorkBuddyAccountPool
 
@@ -309,7 +325,7 @@ export class WorkBuddyScheduler {
     this.runInFlight = true
     void this.runAll()
       .catch((error: unknown) => {
-        this.logger.warn?.('dsh-xdpool automation run failed:', error)
+        this.logger.warn?.(`dsh-xdpool automation run failed: ${errorBrief(error)}`)
       })
       .finally(() => { this.runInFlight = false })
     return true
@@ -484,7 +500,7 @@ export class WorkBuddyScheduler {
       }
     } catch (error: unknown) {
       // A defect in the loop itself must not kill the timer.
-      this.logger.warn?.('dsh-xdpool automation tick failed:', error)
+      this.logger.warn?.(`dsh-xdpool automation tick failed: ${errorBrief(error)}`)
     } finally {
       this.busy = false
     }
@@ -592,12 +608,12 @@ export class WorkBuddyScheduler {
       // run can wait for the write to land.
       if (saved !== undefined && typeof saved.then === 'function') {
         return Promise.resolve(saved).then(undefined, (error: unknown) => {
-          this.logger.warn?.('dsh-xdpool: could not persist automation earnings:', error)
+          this.logger.warn?.(`dsh-xdpool: could not persist automation earnings: ${errorBrief(error)}`)
         })
       }
       return Promise.resolve()
     } catch (error: unknown) {
-      this.logger.warn?.('dsh-xdpool: could not persist automation earnings:', error)
+      this.logger.warn?.(`dsh-xdpool: could not persist automation earnings: ${errorBrief(error)}`)
       return Promise.resolve()
     }
   }
@@ -655,7 +671,7 @@ export class WorkBuddyScheduler {
       for (const account of revived) detail.push(`复活 ${account.label}`)
     } catch (error: unknown) {
       // A probe loop must never fail the run it was meant to help.
-      this.logger.warn?.('automation: could not probe benched accounts:', error)
+      this.logger.warn?.(`automation: could not probe benched accounts: ${errorBrief(error)}`)
     }
 
     const accounts = this.accountsInOrder(kind)
@@ -692,7 +708,7 @@ export class WorkBuddyScheduler {
                 const status = await this.client.fetchCheckinStatus(account.credential)
                 alreadyDone = status.todayCheckedIn === true
               } catch (error: unknown) {
-                this.logger.warn?.(`automation checkin ${account.label}: status read failed, claiming anyway:`, error)
+                this.logger.warn?.(`automation checkin ${account.label}: status read failed, claiming anyway: ${errorBrief(error)}`)
               }
               if (alreadyDone) {
                 this.logger.info?.(`automation checkin ${account.label}: already done today (read, not claimed)`)
@@ -773,7 +789,7 @@ export class WorkBuddyScheduler {
         // malformed payload on one account must not cost the other accounts
         // their daily points.
         failed++
-        this.logger.warn?.(`automation ${accountWord} ${account.label} failed:`, error)
+        this.logger.warn?.(`automation ${accountWord} ${account.label} failed: ${errorBrief(error)}`)
       }
       // Serial spacing, but never sleep after the final account.
       if (index < accounts.length - 1 && this.delayMs > 0 && !this.stopped) await sleep(this.delayMs)
@@ -877,7 +893,7 @@ export class WorkBuddyScheduler {
       }
       return days
     } catch (error: unknown) {
-      this.logger.warn?.(`automation report ${account.label}: streak read-back failed:`, error)
+      this.logger.warn?.(`automation report ${account.label}: streak read-back failed: ${errorBrief(error)}`)
       return -1
     }
   }
@@ -891,7 +907,7 @@ export class WorkBuddyScheduler {
       } catch (error: unknown) {
         // A read failure here is not fatal: the claim pass will read again and
         // record the failure there.
-        this.logger.warn?.(`automation events ${account.label}: list failed:`, error)
+        this.logger.warn?.(`automation events ${account.label}: list failed: ${errorBrief(error)}`)
         continue
       }
       // Every task still short of its target is a candidate. The chains build
@@ -904,7 +920,7 @@ export class WorkBuddyScheduler {
         try {
           chains = await this.chainsFor(task, account.credential)
         } catch (error: unknown) {
-          this.logger.warn?.(`automation events ${account.label}: ${task.taskCode} could not be built:`, error)
+          this.logger.warn?.(`automation events ${account.label}: ${task.taskCode} could not be built: ${errorBrief(error)}`)
           continue
         }
         for (const chain of chains) {
@@ -915,7 +931,7 @@ export class WorkBuddyScheduler {
             sentAnything = true
           } catch (error: unknown) {
             // One chain failing must not stop the others or the claim pass.
-            this.logger.warn?.(`automation events ${account.label}: ${task.taskCode} failed:`, error)
+            this.logger.warn?.(`automation events ${account.label}: ${task.taskCode} failed: ${errorBrief(error)}`)
             break
           }
           if (this.delayMs > 0 && !this.stopped) await sleep(this.delayMs)
@@ -1053,7 +1069,7 @@ export class WorkBuddyScheduler {
       // A listing outage must not turn into a failed task: the caller treats a
       // throw as "this chain could not be built", and the task may still be
       // claimable through another route.
-      this.logger.warn?.(`automation events ${task.taskCode}: marketplace lookup failed:`, error)
+      this.logger.warn?.(`automation events ${task.taskCode}: marketplace lookup failed: ${errorBrief(error)}`)
       return undefined
     }
     const matches = candidates.filter(candidate => {
@@ -1152,7 +1168,7 @@ export class WorkBuddyScheduler {
           ],
         })
       } catch (error: unknown) {
-        this.logger.warn?.(`automation events expert ${expert.expertId}:`, error)
+        this.logger.warn?.(`automation events expert ${expert.expertId}: ${errorBrief(error)}`)
       }
       // Space the chains out: back-to-back uses collapse into one as far as the
       // scorer is concerned, which is what left this task one short.
@@ -1178,7 +1194,7 @@ export class WorkBuddyScheduler {
       const found = listed.find(item => item.expertId === LIGHTHOUSE_EXPERT_ID)
       if (found !== undefined) expert = found
     } catch (error: unknown) {
-      this.logger.warn?.('automation events lighthouse list:', error)
+      this.logger.warn?.(`automation events lighthouse list: ${errorBrief(error)}`)
     }
     await this.client.reportDesktopEvents(credential, expertSummonEvents(expert))
     if (this.delayMs > 0 && !this.stopped) await sleep(this.delayMs)
@@ -1301,7 +1317,7 @@ export class WorkBuddyScheduler {
         this.logger.info?.(`automation streak ${account.label}: redeemed ${tier.tier} (+${tier.credit}c +${tier.energy}e +${tier.chances} draw(s))`)
         this.recordEarnings(account.id, dayKey(this.now()), { bonusCredit: tier.credit })
       } catch (error: unknown) {
-        this.logger.warn?.(`automation streak ${account.label}: redeem ${tier.tier} failed:`, error)
+        this.logger.warn?.(`automation streak ${account.label}: redeem ${tier.tier} failed: ${errorBrief(error)}`)
       }
       if (this.delayMs > 0 && !this.stopped) await sleep(this.delayMs)
     }
@@ -1314,7 +1330,7 @@ export class WorkBuddyScheduler {
         const prize = await this.client.lotteryDraw(credential)
         this.logger.info?.(`automation lottery ${account.label}: draw ${draw + 1}/${chances} -> ${JSON.stringify(prize).slice(0, 120)}`)
       } catch (error: unknown) {
-        this.logger.warn?.(`automation lottery ${account.label}: draw failed:`, error)
+        this.logger.warn?.(`automation lottery ${account.label}: draw failed: ${errorBrief(error)}`)
         // Stop drawing on the first failure: the loop is bounded by the count
         // read before it started, and a failing draw would otherwise spin.
         break

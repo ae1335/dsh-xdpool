@@ -1,6 +1,26 @@
 # Changelog
 本项目的所有重要变更都会记录在此文件。
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## 3.0.10 — settings 挥发字段不再被静默丢弃，积分台账存得住了
+
+### `Plugin entry "llm-xdpool" has no volatile fields` 修掉了
+
+插件的 Config 每个字段都包在 `asVolatile()` 里，但那个封装要求 schemastery ≥ 3.18.3
+才提供 `.volatile()`；仓库锁着 3.18.2，探测不到就**静默降级成非 volatile**。宿主
+0.1.7 的 settings 写门槛只认 volatile 字段，于是插件的一切写入都被拒绝：积分台账
+（`could not persist automation earnings: {}`）、自动化开关、模型选择全部存不住。
+
+升级 `@deepseek-ai/schemastery` 3.18.2 → 3.19.0（配套 cosmokit 1.8.3 → 1.9.0，
+sha512 校验）。预验证：用宿主同款 `volatileForm` 逻辑跑真实 Config，18 个 volatile
+字段全部可见（修复前是 undefined → 写门槛直接抛错）。
+
+### 自动化失败日志不再打成 `{}`
+
+调度器 16 处 `logger.warn?.('…', error)` 把宿主 logger 序列化成 `{}` 的问题一并修了：
+新增 `errorBrief()`（错误 message + 栈顶两帧），所有 warn 站点统一换用。以后
+earnings 持久化再失败，日志会打出真实原因而不是一个空对象。
+
 ## 3.0.9 — 超级麦吉路由挂上生命周期，热重载不再报重复路由
 
 ### 热重载后 `duplicate exact route "/plugins/dsh-xdpool/magicrew/login"` 修掉了
