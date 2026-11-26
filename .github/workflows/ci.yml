@@ -61,16 +61,7 @@ jobs:
       - name: Typecheck (host)
         run: ./node_modules/.bin/tsc -p tsconfig.json --noEmit
       - name: Typecheck (client)
-        # ⚠ 这一步目前是**红**的，而且是既有的坏，不是谁这次改坏的：
-        # src/client 的 tsconfig 开了 exactOptionalPropertyTypes，被它 import
-        # 进来的 src/accounts.ts、src/context-budget.ts、src/free-upstream.ts
-        # 一共 6 处对不上。仓库从来没有在 CI 里跑过 `typecheck:client`，
-        # 所以这 6 处一直没人发现。
-        #
-        # 所以这里用 continue-on-error：CI 保持可用，同时每次 PR 都把这 6 处
-        # 重新打在日志里，不至于被忘掉。等它们修完，**删掉这一行**，
-        # 它就自动变成必须通过的检查。
-        continue-on-error: true
+        # 曾经有 6 处 exactOptionalPropertyTypes 错误，已修完；这步现在是硬门槛。
         run: ./node_modules/.bin/tsc -p tsconfig.client.json --noEmit
       - name: Build
         run: ./node_modules/.bin/tsdown
