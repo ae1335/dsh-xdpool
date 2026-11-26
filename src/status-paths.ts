@@ -1153,6 +1153,14 @@ export interface PoolWebStatus {
   shim: { running: boolean; baseUrl?: string }
   /** Daily-points automation state, so the card can show what ran and when. */
   automation: PoolWebAutomation
+  /**
+   * 渠道包 `auto-checkin.json` 的最近一次结果，只读。
+   *
+   * 和上面的 `automation` 是两套账：那份只记插件自己的 WorkBuddy 桌面账号，
+   * 这里记的是渠道包几十个账号今天的真实签到收益。缺文件时字段缺省，
+   * 卡片就不画那一行 —— 不能拿 0 冒充「今天没领到」。
+   */
+  channelPackCheckin?: PoolWebChannelPackCheckin
   /** Per-account credit floors currently in force, keyed by account id. */
   creditReserves: Readonly<Record<string, number>>
   /**
@@ -1334,6 +1342,17 @@ export interface PoolWebAutomationEarnings {
   compensationCredit: number
   /** Local date the counters belong to (YYYY-MM-DD). */
   date: string
+}
+/** 渠道包自动签到台账在状态文档里的那一行。 */
+export interface PoolWebChannelPackCheckin {
+  /** 台账日期（YYYY-MM-DD），总是显示，避免把旧账说成今日。 */
+  date?: string
+  /** 台账原文，供卡片 tooltip 展示失败/未开启等细节。 */
+  result?: string
+  /** 今天领到的积分合计。 */
+  credit: number
+  /** 台账声明的渠道数。 */
+  channelCount: number
 }
 /**
  * The two gateways, matching the provider ids the host registers. `cn` is the

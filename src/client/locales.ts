@@ -703,6 +703,12 @@ export const en = {
   'channelpool.autoClaimRun': 'Run now',
   'channelpool.autoClaimRunning': 'Running…',
   'channelpool.autoClaimRunHint': 'Run one collection pass now instead of waiting for the scheduled hour',
+  // The other check-in ledger (channel-pack's auto-checkin.json), shown beside
+  // the pool's own earnings so a WorkBuddy-only number is not read as "nothing ran".
+  'channelpool.packCheckin': 'Channel-pack check-in ({date}): {body}',
+  'channelpool.packCheckinGained': '+{credit} credits · {count} channels',
+  'channelpool.packCheckinNoCredit': '{count} channels',
+  'channelpool.packCheckinEmpty': 'nothing claimed',
   'channelpool.modePrefer': 'Priority',
   'channelpool.modePreferHint': 'Priority: always use the first account until it is rate-limited.',
   'channelpool.modeRoundRobin': 'Round robin',
@@ -1490,6 +1496,11 @@ export const zh: Record<XdPoolSettingsKey, string> = {
   'channelpool.autoClaimRun': '立即执行',
   'channelpool.autoClaimRunning': '领取中…',
   'channelpool.autoClaimRunHint': '马上跑一轮领取，不用等到预定时间',
+  // 另一套签到账（渠道包 auto-checkin.json）：和插件自己的积分并列显示。
+  'channelpool.packCheckin': '渠道包签到（{date}）：{body}',
+  'channelpool.packCheckinGained': '+{credit} 积分 · {count} 渠道',
+  'channelpool.packCheckinNoCredit': '{count} 渠道',
+  'channelpool.packCheckinEmpty': '暂无签到记录',
   'channelpool.modePrefer': '优先',
   'channelpool.modePreferHint': '优先：总用排在前面的账号，它限流了才换下一个。',
   'channelpool.modeRoundRobin': '轮换',

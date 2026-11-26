@@ -96,10 +96,35 @@ import {
 import { doubaoListing } from '../doubao-models.ts'
 import { REGISTERED_CHANNELS } from '../channel-roster.ts'
 import { DoubaoAutomationPane } from './DoubaoAutomationPane.tsx'
-import type { PoolDistribution, PoolWebChannel, PoolWebChannelModel } from '../status-paths.ts'
+import type {
+  PoolDistribution,
+  PoolWebChannel,
+  PoolWebChannelModel,
+  PoolWebChannelPackCheckin,
+} from '../status-paths.ts'
 import type { XdPoolSettingsKey } from './locales.ts'
 
 type Translate = (key: XdPoolSettingsKey, params?: Record<string, unknown>) => string
+
+/**
+ * 积分自动化那一栏的渠道包摘要。
+ *
+ * 这一行读的是渠道包自己的台账（`auto-checkin.json`），不是插件 earnings：
+ * 后者只记 WorkBuddy 桌面账号，用户看到「今日积分」只有那一份时会以为签到
+ * 没跑。两笔账并列显示，日期原样带上，免得把昨天的台账说成今天的。
+ */
+function packCheckinLineOf(t: Translate | undefined, summary: PoolWebChannelPackCheckin): string {
+  const body = summary.credit > 0
+    ? (t?.('channelpool.packCheckinGained', {
+        credit: String(summary.credit), count: String(summary.channelCount),
+      }) ?? `+${String(summary.credit)} 积分 · ${String(summary.channelCount)} 渠道`)
+    : summary.channelCount > 0
+      ? (t?.('channelpool.packCheckinNoCredit', { count: String(summary.channelCount) })
+        ?? `${String(summary.channelCount)} 渠道`)
+      : (t?.('channelpool.packCheckinEmpty') ?? '暂无签到记录')
+  return t?.('channelpool.packCheckin', { date: summary.date ?? '--', body })
+    ?? `渠道包签到（${summary.date ?? '--'}）：${body}`
+}
 
 /**
  * The last good answer, kept OUTSIDE the component.
@@ -1272,7 +1297,7 @@ async function fetchOwnSession(channel: string): Promise<
  * `active` 为空时（首次进入、或选中的渠道被移除）退回第一家，这样右栏
  * 永远不会是空的。
  */
-export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoClaimBusy, onAutoClaim, autoClaimRunning, onAutoClaimRun, banner, regionCards }: {
+export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoClaimBusy, onAutoClaim, autoClaimRunning, onAutoClaimRun, channelPackCheckin, banner, regionCards }: {
   readonly t?: Translate | undefined
   /** 中栏选中的渠道 id；空则显示第一家。 */
   readonly active?: string | undefined
@@ -1286,6 +1311,8 @@ export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoCla
   /** Run one automation pass now, instead of waiting for the scheduled hour. */
   readonly onAutoClaimRun?: (() => void) | undefined
   readonly onAutoClaim?: ((on: boolean) => void) | undefined
+  /** 渠道包 auto-checkin.json 的最近一次结果，画在「积分自动化」下面。 */
+  readonly channelPackCheckin?: PoolWebChannelPackCheckin | undefined
   /** 外层的提示条，放进详情列 mbody 顶部（不能落在 .app 网格里）。 */
   readonly banner?: ReactNode | undefined
   /**
@@ -3064,6 +3091,13 @@ export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoCla
               <span className="policy-hint">
                 {t?.('channelpool.autoClaimHint') ?? '开着就会在后台领每天的积分，不用手动点。'}
               </span>
+              {/* 渠道包那一套签到账：和上面的「今日已领」不是同一个来源，
+                  并列显示才能解释为什么插件池只记了 WorkBuddy 的积分。 */}
+              {channelPackCheckin === undefined ? null : (
+                <span className="policy-hint" title={channelPackCheckin.result}>
+                  {packCheckinLineOf(t, channelPackCheckin)}
+                </span>
+              )}
             </div>
           )}
         </div>

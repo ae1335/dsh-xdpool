@@ -28,6 +28,7 @@ import { isGatewayRejectionError, regionOf, type WorkBuddyUpstreamClient } from 
 import type { WorkBuddyShim } from './shim.ts'
 import type { UsageSummary } from './stats.ts'
 import { isAutomationJobKind, type AutomationRunSummary, type AutomationStatus } from './scheduler.ts'
+import { readChannelPackCheckin } from './channel-pack-checkin.ts'
 import { hasModelsListing, isProviderId } from './providers.ts'
 import { PROVIDER_NOTES_ZH } from './provider-notes-zh.ts'
 import { listProviderStates, providerApiKeys, providerEnabled, type AggregateStore } from './store.ts'
@@ -1011,6 +1012,9 @@ export async function poolWebStatus(
     earningsToday: {},
     runInProgress: false,
   }
+  // 渠道包的签到账在另一份文件里。这里只读不改： earned 面板因此能同时显示
+  // 插件自己的 WorkBuddy 收益和渠道包那几十个账号今天领到的积分。
+  const channelPackCheckin = await readChannelPackCheckin()
   return {
     ok: accounts.length > 0 && cooling < accounts.length,
     accounts: rows,
@@ -1037,6 +1041,16 @@ export async function poolWebStatus(
     regions,
     shim,
     automation,
+    // 缺省即「没有台账」，不是「今天没领到」。只把卡片要显示的两块内容
+    // 放上 wires，逐渠道原文留在 title 里。
+    ...channelPackCheckin === undefined ? {} : {
+      channelPackCheckin: {
+        ...channelPackCheckin.date === undefined ? {} : { date: channelPackCheckin.date },
+        ...channelPackCheckin.result === undefined ? {} : { result: channelPackCheckin.result },
+        credit: channelPackCheckin.credit,
+        channelCount: channelPackCheckin.channelCount,
+      },
+    },
     creditReserves: deps.pool.creditReservesInOrder(),
     // The accounts thrown out of the pool. Reported on every region's document
     // (not just the one they came from) because the list is a property of the

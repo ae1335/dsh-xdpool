@@ -1644,6 +1644,8 @@ export function PoolCard({ t, settingsScope }: PoolCardProps) {
                 onAutoClaim={on => { void setAutomationEnabled('cn', on) }}
                 autoClaimRunning={automationRun !== undefined}
                 onAutoClaimRun={() => { void runAutomationJob('cn') }}
+                /* 渠道包 auto-checkin.json 的最近结果，只从 cn 状态文档取一次。 */
+                channelPackCheckin={statusOf('cn')?.channelPackCheckin}
                 /*
                   提示条放进详情列的 mbody 里。之前它们是 .app 网格的直接子元素，
                   一出现就占一个格子，把三列挤乱。
