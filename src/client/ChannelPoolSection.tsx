@@ -1174,9 +1174,10 @@ const OWN_CHECKIN_CHANNELS: Readonly<Record<string, string>> = {
  * 领一个渠道的签到积分。
  *
  * 一个分发器而不是四处复制：文案与随后的余额刷新必须一致，复制四份就会漂。
- * 返回一句给用户看的结果，失败也返回（而不是抛），调用处直接显示。
+ * 返回一句给用户看的结果 + 路由回传的各账号领取状态（回喂徽章用），
+ * 失败也返回（而不是抛），调用处直接显示。
  */
-async function ownCheckin(channel: string): Promise<string | undefined> {
+async function ownCheckin(channel: string): Promise<{ text: string; claimed: ChannelCreditStatus[] } | undefined> {
   const route = OWN_CHECKIN_CHANNELS[channel]
   if (route === undefined) return undefined
   try {
@@ -1185,11 +1186,31 @@ async function ownCheckin(channel: string): Promise<string | undefined> {
       headers: { accept: 'application/json' },
       credentials: 'same-origin',
     })
-    const body = await response.json() as { ok?: boolean; credit?: number; reason?: string; error?: string }
-    if (body.ok === false) return body.reason ?? body.error ?? '签到失败'
-    return typeof body.credit === 'number' ? `已领 ${String(body.credit)} 积分` : '已签到'
+    const body = await response.json() as {
+      ok?: boolean
+      credit?: number
+      gained?: number
+      reason?: string
+      error?: string
+      accounts?: readonly { accountId?: unknown; todayCheckedIn?: unknown; todayCredit?: unknown }[]
+    }
+    if (body.ok === false) return { text: body.reason ?? body.error ?? '签到失败', claimed: [] }
+    /* magicrew 系路由回传每个账号的领取结果，直接回喂徽章（只收「已领」的行） */
+    const claimed = (body.accounts ?? []).flatMap(row =>
+      typeof row.accountId === 'string' && row.accountId !== '' && row.todayCheckedIn === true
+        ? [{
+            accountId: row.accountId,
+            todayCheckedIn: true as const,
+            ...typeof row.todayCredit === 'number' && Number.isFinite(row.todayCredit)
+              ? { todayCredit: row.todayCredit }
+              : {},
+          }]
+        : [])
+    /* magicrew 路由的总额字段叫 gained，astudio / baizhi 叫 credit */
+    const credit = typeof body.credit === 'number' ? body.credit : body.gained
+    return { text: typeof credit === 'number' ? `已领 ${String(credit)} 积分` : '已签到', claimed }
   } catch {
-    return '签到失败'
+    return { text: '签到失败', claimed: [] }
   }
 }
 
@@ -2769,7 +2790,27 @@ export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoCla
     try {
       const said = await ownCheckin(provider)
       if (!mountedRef.current) return
-      if (said !== undefined) setNotice(said)
+      if (said !== undefined) {
+        setNotice(said.text)
+        /*
+          自有签到路由的渠道（magicrew / autoclaw / astudio / baizhi）不在名册的
+          credits.status 里，wave 2 不会替它们读状态——徽章靠路由回喂：
+          把「今日已领」的账号直接写进条目。随后的 refreshBalances 不动 statuses，
+          所以这就是终态；回传为空的账号保留原状，绝不清掉已领的徽章。
+        */
+        if (said.claimed.length > 0) {
+          const claimed = said.claimed
+          setEntries(previous => previous.map(entry => entry.channel.id === provider
+            ? {
+                ...entry,
+                statuses: [
+                  ...entry.statuses.filter(row => claimed.every(c => c.accountId !== row.accountId)),
+                  ...claimed,
+                ],
+              }
+            : entry))
+        }
+      }
       await refreshBalances(provider, true)
     } finally {
       if (mountedRef.current) markBusy(provider, false)

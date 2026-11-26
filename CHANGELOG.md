@@ -2,6 +2,33 @@
 本项目的所有重要变更都会记录在此文件。
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 3.0.12 — magicrew / autoclaw 领取后徽章立即翻成已领
+
+### 自有签到路由回喂徽章状态
+
+3.0.11 让 wave 2 按名册 `credits.status` 取真实状态，但 magicrew、autoclaw 及其国际站
+根本不在 pack 的 `credits.status` 派发范围里（pack 的 `ALL_PRODUCTS` 只有 buddy / workbuddy），
+名册里也只声明了 `claim` 没有 `status`——这几条渠道的 `statuses` 恒为空，
+徽章永远「今日已领 0/N」，点完「全部领取」按钮也还能再点。
+
+现在自有签到路由（`/plugins/dsh-xdpool/magicrew/checkin`，autoclaw 两站与 magicrew-intl 共用同一实现）
+在响应里新增 `accounts` 数组：每个签到成功或「今天已领过」的账号带回
+`{ accountId, todayCheckedIn: true, todayCredit? }`，顶层 `ok / gained / message` 保持不变。
+客户端「全部领取」成功后把这些行合并进该渠道条目的 `statuses`，徽章立刻翻成
+「已领 +N」，今日已领计数同步更新。随后的 `refreshBalances` 不碰 `statuses`，
+所以回喂值就是最终状态；失败账号不进数组，绝不会把已领徽章刷回未领。
+
+已知局限：magicrew 上游没有「查今日是否已领」的 GET 端点，首屏未点击前的初始状态
+仍读不到（沿用 3.0.11 之前的行为）；首次「全部领取」之后才是真实状态。
+
+### 顺手修掉领取金额的字段错配
+
+`ownCheckin` 之前读 `body.credit`，而 magicrew 路由实际返回 `gained`——
+领取金额一直显示不出来，只能落到「已签到」兜底文案。
+现在优先读 `gained`，兼容保留 `credit`（astudio / baizhi 等其它自有路由可能仍在用）。
+
+
+
 ## 3.0.11 — 渠道池的签到徽章回到真实状态
 
 ### 「今日已领 0/N」与「今日签到：未领」修掉了

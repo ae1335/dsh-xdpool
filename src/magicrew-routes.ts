@@ -300,11 +300,22 @@ function mountSite(
         if (targets.length === 0) return json(res, 200, { ok: false, reason: '没有可签到的账号' })
         let gained = 0
         const messages: string[] = []
+        /*
+          回喂渠道池徽章：签到成功或「今天已领过」的账号都算今日已领，
+          随响应带回每个账号的状态。失败的账号不写状态——
+          免得一次网络抖动把已领的徽章刷回未领。
+        */
+        const claimed: { accountId: string; todayCheckedIn: true; todayCredit?: number }[] = []
         for (const account of targets) {
           const result = await magicrewCheckin(account.credential, product)
           if (result.ok) {
             if (result.gained !== undefined) gained += result.gained
             messages.push(`${magicrewDisplayNickname(account.credential, product)}：${result.message}`)
+            claimed.push({
+              accountId: account.id,
+              todayCheckedIn: true,
+              ...result.gained === undefined ? {} : { todayCredit: result.gained },
+            })
           } else {
             messages.push(`${magicrewDisplayNickname(account.credential, product)}：${result.error}`)
           }
@@ -314,6 +325,7 @@ function mountSite(
           ok: true,
           gained,
           message: messages.join('；'),
+          accounts: claimed,
         })
       } catch (cause: unknown) {
         return json(res, 500, { error: cause instanceof Error ? cause.message : String(cause) })
