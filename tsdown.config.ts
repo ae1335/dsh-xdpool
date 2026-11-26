@@ -9,6 +9,7 @@ const PLUGIN_ID = 'dsh-xdpool'
  */
 const CLIENT_EXTERNALS = [
   'react',
+  'react-dom',
   'react/jsx-runtime',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-runtime/client',
