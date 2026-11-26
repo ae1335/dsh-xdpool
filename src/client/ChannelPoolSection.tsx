@@ -2086,7 +2086,35 @@ export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoCla
         }
         return
       }
-      const envelope = await callPack('credits.balances', force ? { provider, force: true } : { provider })
+      /**
+       * `credits.status` answers the claim badge: which accounts already
+       * collected today. 2.5.1's wave-2 rewrite replaced the initial fill with
+       * "statuses: [], filled by wave 2" — and wave 2 only ever filled the
+       * BALANCES, so `statuses` stayed [] forever: every card read
+       * 「今日已领 0/N」 under accounts that HAD claimed, and the claim button
+       * stayed claimable after a claim. Fetched alongside the balance read
+       * (the pre-2.5.1 shape), only for channels whose roster entry declares
+       * a status API.
+       *
+       * The flag is read from the freshest entry table rather than the state:
+       * the initial wave-2 runs before the setEntries above has rendered, so
+       * `entriesRef.current` still holds the previous (first mount: empty)
+       * list and `poolSnapshot` is the one carrying the just-built entries.
+       */
+      const channel = entriesRef.current.find(row => row.channel.id === provider)?.channel
+        ?? poolSnapshot?.entries.find(row => row.channel.id === provider)?.channel
+      const [envelope, statusEnvelope] = await Promise.all([
+        callPack('credits.balances', force ? { provider, force: true } : { provider }),
+        channel?.credits?.status === true
+          ? callPack('credits.status', { provider })
+          : Promise.resolve(undefined),
+      ])
+      /**
+       * A refused status read must not wipe badges a previous answer earned
+       * (a transient failure on a refresh would flip 已领 back to 未领):
+       * `undefined` keeps whatever the entry had, an ok answer replaces it.
+       */
+      const statusRows = statusEnvelope?.ok === true ? creditStatusesFrom(statusEnvelope) : undefined
       if (seq !== undefined && loadSeq.current !== seq) return
       if (!mountedRef.current) {
         // Still record the answer for the next mount: the read cost a network
@@ -2095,7 +2123,14 @@ export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoCla
           const rows = balancesFrom(envelope)
           poolSnapshot = {
             entries: (poolSnapshot?.entries ?? []).map(entry =>
-              entry.channel.id === provider ? { ...entry, balancePending: false, balances: rows } : entry),
+              entry.channel.id === provider
+                ? {
+                    ...entry,
+                    balancePending: false,
+                    balances: rows,
+                    ...(statusRows === undefined ? {} : { statuses: statusRows }),
+                  }
+                : entry),
             error: poolSnapshot?.error,
           }
         }
@@ -2104,14 +2139,25 @@ export function ChannelPoolSection({ t, active, onAddAccount, autoClaim, autoCla
       if (!envelope.ok) {
         setEntries(previous => previous.map(entry =>
           entry.channel.id === provider
-            ? { ...entry, balancePending: false, balanceError: envelope.error?.message ?? 'credits.balances refused' }
+            ? {
+                ...entry,
+                balancePending: false,
+                balanceError: envelope.error?.message ?? 'credits.balances refused',
+                ...(statusRows === undefined ? {} : { statuses: statusRows }),
+              }
             : entry))
         return
       }
       const rows = balancesFrom(envelope)
       setEntries(previous => previous.map(entry =>
         entry.channel.id === provider
-          ? { ...entry, balancePending: false, balanceError: undefined, balances: rows }
+          ? {
+              ...entry,
+              balancePending: false,
+              balanceError: undefined,
+              balances: rows,
+              ...(statusRows === undefined ? {} : { statuses: statusRows }),
+            }
           : entry))
     } finally {
       if (mountedRef.current && !quiet) markBusy(provider, false)

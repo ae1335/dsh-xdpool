@@ -2,6 +2,23 @@
 本项目的所有重要变更都会记录在此文件。
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 3.0.11 — 渠道池的签到徽章回到真实状态
+
+### 「今日已领 0/N」与「今日签到：未领」修掉了
+
+2.5.1 的加载优化（#102/#103）把渠道条目的签到状态从「首波并行读取」改成
+`statuses: []`，注释写着「wave 2 会填」——但 wave 2 只填了余额，`credits.status`
+的调用整个消失，`creditStatusesFrom` 从此成为死导入。结果从 2.5.1 起
+`statuses` 永远是空数组：渠道池每张卡片都读「今日已领 0/N」，账号明细的
+「今日签到」永远显示未领，领取按钮在领取之后也保持可按——即使账号当天早已
+领取。
+
+修复：wave 2 的 `refreshBalances` 与余额并行地补回 `credits.status`（只对名册
+里声明了状态接口的渠道，比如 buddy），解析回 `statuses`。渠道标记从最新
+条目表读取（初始 wave 2 跑在 setEntries 渲染之前，闭包里的 entries 还是旧值）；
+状态请求失败不清空已赢得的徽章，只有成功应答才覆盖。领取（credits.claimAll）
+后的刷新走的同一条路，领完徽章立即翻成已领。
+
 ## 3.0.10 — settings 挥发字段不再被静默丢弃，积分台账存得住了
 
 ### `Plugin entry "llm-xdpool" has no volatile fields` 修掉了
