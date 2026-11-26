@@ -1,8 +1,10 @@
 /**
- * 设计稿样式，原样接管。
+ * 设计稿样式的规范源（canonical source）。
  *
- * 来源：xdpool-design 的 tokens.css / app.css / channel-colors.css / build-a.mjs。
- * 改样式请改设计稿源文件，再跑 scripts/extract-design-css.mjs。
+ * 早期这里保存 tokens.css / app.css / channel-colors.css / build-*.mjs 等设计稿源文件，
+ * 但它们从未入库，已随原开发机一起丢失。当前这份文件是已经线上验证过的产物快照，
+ * 现在作为仓库内唯一可修改的规范源；改样式请改这里，再跑
+ * scripts/extract-design-css.mjs 复制到 src/client/design-css.ts（产物，不要手改）。
  */
 export const DESIGN_TOKENS_CSS = `/* XD Pool 设计变量
    ============================================================

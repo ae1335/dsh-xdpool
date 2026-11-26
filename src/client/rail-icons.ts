@@ -1,8 +1,9 @@
 /**
- * 设计稿的功能页图标。
+ * 功能页图标的规范源（canonical source）。
  *
  * 全部是 24 网格、stroke-width 1.8、圆头描边 —— 和设计稿的 rail-item 一致。
- * 路径逐条照抄 xdpool-design/lib.mjs 的 NAV 与 rail-foot，改设计稿时这里一起改。
+ * 旧的 xdpool-design/lib.mjs 从未入库；这份文件是线上已验证版本的快照。
+ * 改图标请改这里，再跑 scripts/make-rail-icons.mjs 复制到 src/client/rail-icons.ts。
  * 用法：<RailIcon name="pool" />
  *
  * 键名 = 功能页的 tab id。登录通道的 tab id 是 `channels`（不是 `login`），

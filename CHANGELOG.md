@@ -2,6 +2,15 @@
 本项目的所有重要变更都会记录在此文件。
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 3.0.14 — 设计源回到仓库，生成脚本不再绑死机器路径
+
+- 新增 `xdpool-design/design-css.ts` 与 `xdpool-design/rail-icons.ts` 作为规范源；
+  原始设计稿（tokens.css / app.css / build-*.mjs）从未入库且已丢失，这两个快照是线上验证过的版本。
+- `scripts/extract-design-css.mjs` 与 `scripts/make-rail-icons.mjs` 改为按脚本位置定位仓库根目录，
+  从规范源复制到 `src/client/`，不再写死 `D:/dsh-home`。
+- 旧图标生成脚本只有 10 个图标、与线上 14 键产物早已分叉；现在直接复制规范源，不再漂移。
+- 新增 `tests/design-source-sync.test.ts`：源与产物必须逐字节一致，脚本不得依赖机器绝对路径。
+
 ## 3.0.13 — 积分面板补上渠道包签到那笔账
 
 ### 「今日积分只显示 WorkBuddy」多了一行对照

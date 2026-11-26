@@ -1,7 +1,12 @@
 # 本仓库的界面规则（改 UI 之前必读）
 
-一句话：**插件的界面外观只有一个来源 —— `xdpool-design/` 里的设计稿。**
+一句话：**插件的界面外观只有一个来源 —— `xdpool-design/` 里的设计源。**
 新加界面时是「照它已有的类名和结构搭」，不是「另起一套类名再配一套样式」。
+
+仓库内的 `xdpool-design/design-css.ts` 与 `xdpool-design/rail-icons.ts` 是规范源；
+`src/client/design-css.ts` 与 `src/client/rail-icons.ts` 是脚本产物，不要手改。
+原始设计稿文件（tokens.css / app.css / build-*.mjs）从未入库、已随原开发机丢失，
+不要试图恢复旧的提取流程。`tests/design-source-sync.test.ts` 会阻止两者再次漂移。
 
 ## 为什么这条规则存在（两次真实事故）
 
@@ -16,15 +21,17 @@
 
 ## 加一个新界面时的正确顺序
 
-1. **先改设计稿**：在 `xdpool-design/` 里加页面或区块，**复用已有的类名**
+1. **先改规范源**：在 `xdpool-design/design-css.ts` 里加/改样式，**复用已有的类名**
    （`.sec` / `.sec-head` / `.sec-title` / `.acct*` / `.kpis` / `.facts` / `.tiny` / `.chip` …），
-   需要新类名时也写进设计稿的 CSS，而不是写进 `src/`。
-2. **跑提取**：`node scripts/extract-design-css.mjs` —— 生成 `src/client/design-css.ts`
-   （这个文件是产物，不要手改）。
+   需要新类名时也写进这个文件，而不是直接写进 `src/client`。
+   图标改 `xdpool-design/rail-icons.ts`。
+2. **跑脚本**：`node scripts/extract-design-css.mjs` 与 `node scripts/make-rail-icons.mjs`
+   —— 分别生成 `src/client/design-css.ts` 与 `src/client/rail-icons.ts`（产物，不要手改）。
+   两个脚本都按自身位置定位仓库根目录，不依赖某台机器的绝对路径。
 3. **组件里用同一批类名**：`src/client/*.tsx` 只负责结构，不写布局 CSS；
    全局命名空间里**不新增** `xdp-*` 之类的布局类。
    真正必须加的少量规则（例如亮色覆盖）放进 `theme-css.ts` 这类明确命名的文件，
-   且只覆盖设计稿已有的选择器。
+   且只覆盖设计源已有的选择器。
 4. **量过再交**：1280 与 390 两种宽度都要过（`check_design` 或等价的真实渲染检查），
    重点看：文字重叠 / 溢出 / 固定栏压内容 / 单列是否成立。
 
