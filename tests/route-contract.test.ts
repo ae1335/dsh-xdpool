@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { poolSectionCombinedSource } from './pool-source'
 
 /**
  * The client reads fields the server actually sends.
@@ -8,7 +9,7 @@ import { readFileSync } from 'node:fs'
  * nothing, nothing errors, and the channel looks broken for no visible reason. These cases
  * compare the two SOURCES, which is the only way to catch it without a live host.
  */
-const section = readFileSync(new URL('../src/client/ChannelPoolSection.tsx', import.meta.url), 'utf8')
+const section = poolSectionCombinedSource()
 const channelsPage = readFileSync(new URL('../src/client/ChannelsPage.tsx', import.meta.url), 'utf8')
 
 /** The routes each card component calls, and the fields it reads from the answer. */

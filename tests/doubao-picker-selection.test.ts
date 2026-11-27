@@ -20,11 +20,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { visibleDoubaoModels } from '../src/doubao-host-adapter.ts'
+import { poolSectionCombinedSource } from './pool-source'
 
 const indexSource = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8')
 const routesSource = readFileSync(new URL('../src/doubao-routes.ts', import.meta.url), 'utf8')
 const adapterSource = readFileSync(new URL('../src/doubao-host-adapter.ts', import.meta.url), 'utf8')
-const cardSource = readFileSync(new URL('../src/client/ChannelPoolSection.tsx', import.meta.url), 'utf8')
+const cardSource = poolSectionCombinedSource()
 
 /** A roster shaped like the live one: static rows plus discovered `person-*` rows. */
 const ROSTER = [

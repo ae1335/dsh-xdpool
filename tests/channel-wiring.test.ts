@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { poolSectionCombinedSource } from './pool-source'
 
 /**
  * A route nobody calls is a feature that cannot be used.
@@ -9,7 +10,7 @@ import { readFileSync } from 'node:fs'
  * These cases check the WIRING, not the behaviour: every route the host serves has to appear
  * in the client that is meant to call it.
  */
-const section = readFileSync(new URL('../src/client/ChannelPoolSection.tsx', import.meta.url), 'utf8')
+const section = poolSectionCombinedSource()
 const channels = readFileSync(new URL('../src/client/ChannelsPage.tsx', import.meta.url), 'utf8')
 
 /** The routes this plugin serves for its own channels. */

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { poolSectionCombinedSource } from './pool-source'
 
 /**
  * The detail page: one page for every channel.
@@ -18,7 +19,7 @@ import { describe, expect, it } from 'vitest'
 const page = readFileSync(new URL('../src/client/ChannelDetailPage.tsx', import.meta.url), 'utf8')
 const styles = readFileSync(new URL('../src/client/detail-page-styles.ts', import.meta.url), 'utf8')
 const pool = readFileSync(new URL('../src/client/PoolCard.tsx', import.meta.url), 'utf8')
-const channels = readFileSync(new URL('../src/client/ChannelPoolSection.tsx', import.meta.url), 'utf8')
+const channels = poolSectionCombinedSource()
 
 describe('one page, fed by data', () => {
   it('draws one channel detail in one place', () => {

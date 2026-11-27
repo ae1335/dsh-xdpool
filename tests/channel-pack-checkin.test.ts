@@ -15,6 +15,7 @@ import {
   parseChannelPackCheckin,
   readChannelPackCheckin,
 } from '../src/channel-pack-checkin.ts'
+import { poolSectionCombinedSource } from './pool-source'
 
 const homes: string[] = []
 afterEach(async () => {
@@ -112,7 +113,7 @@ describe('台账读取', () => {
 })
 
 describe('面板接线', () => {
-  const section = readFileSync(new URL('../src/client/ChannelPoolSection.tsx', import.meta.url), 'utf8')
+  const section = poolSectionCombinedSource()
   const card = readFileSync(new URL('../src/client/PoolCard.tsx', import.meta.url), 'utf8')
   const web = readFileSync(new URL('../src/web-status.ts', import.meta.url), 'utf8')
 

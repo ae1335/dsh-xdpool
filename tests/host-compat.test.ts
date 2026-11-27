@@ -28,6 +28,7 @@ import { describe, expect, it } from 'vitest'
 import { WorkBuddyAccountPool } from '../src/accounts.ts'
 import { WorkBuddyScheduler, dayKey } from '../src/scheduler.ts'
 import type { WorkBuddyUpstreamClient } from '../src/upstream.ts'
+import { poolSectionCombinedSource } from './pool-source'
 
 /** Source of the host entry, read as text for the structural assertions. */
 const hostSource = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8')
@@ -341,7 +342,7 @@ describe('the settings page renders on both kernel lines', () => {
      * this file at all, which is what these assertions pin down.
      */
     const card = readFileSync(new URL('../src/client/PoolCard.tsx', import.meta.url), 'utf8')
-    const section = readFileSync(new URL('../src/client/ChannelPoolSection.tsx', import.meta.url), 'utf8')
+    const section = poolSectionCombinedSource()
     /*
       详情只有一份标记 —— 它在 ChannelPoolSection 里。
 

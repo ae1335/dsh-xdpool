@@ -18,8 +18,9 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { poolSectionCombinedSource } from './pool-source'
 
-const section = readFileSync(new URL('../src/client/ChannelPoolSection.tsx', import.meta.url), 'utf8')
+const section = poolSectionCombinedSource()
 const locales = readFileSync(new URL('../src/client/locales.ts', import.meta.url), 'utf8')
 
 /** The `load` function body, bounded by the retry helper that follows it. */
@@ -42,7 +43,7 @@ describe('the channel cards survive a remount', () => {
     // The defect, precisely: a result that arrived after the reader switched
     // tabs was dropped for not being watched. The store must be filled first,
     // so the answer survives even when nobody is looking.
-    const storeWrite = loadBody.indexOf('poolSnapshot = { entries: next, error: undefined }')
+    const storeWrite = loadBody.indexOf('assignPoolSnapshot({ entries: next, error: undefined }')
     const mountedCheck = loadBody.indexOf('if (!mountedRef.current) return', storeWrite === -1 ? 0 : storeWrite)
     expect(storeWrite).toBeGreaterThan(-1)
     expect(mountedCheck).toBeGreaterThan(storeWrite)
@@ -113,6 +114,6 @@ describe('loading and failing are stated, not rendered as air', () => {
   it('stops loading on failure, so the error is what stays on screen', () => {
     const catchArm = loadBody.slice(loadBody.indexOf('} catch (cause) {'))
     expect(catchArm).toContain('setLoading(false)')
-    expect(catchArm).toContain('poolSnapshot = { entries: entriesRef.current, error: message }')
+    expect(catchArm).toContain('assignPoolSnapshot({ entries: entriesRef.current, error: message }')
   })
 })
