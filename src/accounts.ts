@@ -28,7 +28,7 @@ import { encryptedFieldKeyId, isEncryptedFieldWrapper, openEncryptedField, readA
 
 import type { TokenRefresher, CreditReader, ExpiryReading, WorkBuddySkippedFile, WorkBuddyCredential, WorkBuddyAccount, AccountDistribution, AccountPoolOptions } from './accounts-types.ts'
 
-import { WORKBUDDY_LIVE_FILENAME, WORKBUDDY_AUTH_FILE_ENV, parseWorkBuddyAuth, workbuddyAccountId, cheapIdentityId, EXPIRY_READING_TTL_MS, nonEmptyEnv, expiryToMs, compareFreshness, isFresher, accountLabel, STICKY_AFFINITY_LIMIT, idleWeight, EXHAUST_COOLDOWN_MS, CREDENTIAL_DEAD_COOLDOWN_MS, EXPIRY_WARM_RETRY_MS, isCredentialDeadError } from './accounts-core.ts'
+import { WORKBUDDY_LIVE_FILENAME, WORKBUDDY_AUTH_FILE_ENV, parseWorkBuddyAuth, workbuddyAccountId, cheapIdentityId, EXPIRY_READING_TTL_MS, nonEmptyEnv, expiryToMs, compareFreshness, isFresher, accountLabel, STICKY_AFFINITY_LIMIT, idleWeight, EXHAUST_COOLDOWN_MS, CREDENTIAL_DEAD_COOLDOWN_MS, EXPIRY_WARM_RETRY_MS, CREDIT_WARM_RETRY_MS, isCredentialDeadError } from './accounts-core.ts'
 
 /**
  * Platform-default directories holding the desktop app's auth files.
@@ -453,6 +453,23 @@ export class WorkBuddyAccountPool {
    */
   private expiryWarmAttemptAt = new Map<string, number>()
   /**
+   * Balance reads currently in flight, for the same de-duplication purpose as
+   * {@link expiryWarmInflight}: a scan-triggered credit warm and an
+   * acquire-triggered one must not both spend a billing round trip on the
+   * same account.
+   */
+  private creditWarmInflight = new Set<string>()
+  /**
+   * Last time the pool attempted an account's balance reading, epoch ms.
+   *
+   * Throttles FAILED attempts only (see {@link CREDIT_WARM_RETRY_MS}): a
+   * successful read writes the balance itself, and a written reading closes
+   * the gate permanently — the request path's own refresh keeps it current
+   * from there. Until it lands, though, this stops a failing billing
+   * endpoint from being hit on every scan and every acquire.
+   */
+  private creditWarmAttemptAt = new Map<string, number>()
+  /**
    * Last time each account served a request, epoch ms. Drives the idle term
    * of the priority-mode weighting below: an account that just served loses to
    * one that has been idle, so a small pool stops hammering a single account.
@@ -876,6 +893,10 @@ export class WorkBuddyAccountPool {
     // cold start therefore still degrades to pool order, but it now says so out
     // loud (see `pickByExpiry`) and the readings land moments later.
     this.warmExpiryReadings()
+    // Same fire-and-forget warm for the reserve floor (V4): a reserved account
+    // with no balance reading yet gets one read here, so the floor engages
+    // moments after a cold start instead of after the first served request.
+    this.warmCreditReadings()
     // Persist the merged list so the next process starts from it. Written on
     // every scan: scans are event-driven (login, card refresh), not per-request,
     // so the write cost is negligible next to the at-rest key spawns a scan
@@ -1002,6 +1023,87 @@ export class WorkBuddyAccountPool {
     void this.warmOneExpiryReading(account, client as TokenRefresher & CreditReader)
   }
 
+  /**
+   * Warm the balance readings of every account that has a credit reserve
+   * configured but no balance reading yet (the V4 cold-start hole).
+   *
+   * Same shape as {@link warmExpiryReadings}, with one deliberate difference:
+   * the gate is the user's own reserve, not the distribution mode. A balance
+   * below the floor changes what `available()` decides in EVERY mode, so the
+   * read is never "background traffic with no consumer" the way a deadline
+   * read is under `priority` — the reserve is the user asking for it.
+   */
+  private warmCreditReadings(): void {
+    if (this.client?.fetchCredits === undefined) return
+    for (const account of this.accounts) this.warmCreditReadingFor(account.id)
+  }
+
+  /** One account's balance warm read; see {@link warmCreditReadings}. */
+  private async warmOneCreditReading(
+    account: WorkBuddyAccount,
+    client: TokenRefresher & CreditReader,
+  ): Promise<void> {
+    this.creditWarmInflight.add(account.id)
+    this.creditWarmAttemptAt.set(account.id, Date.now())
+    try {
+      const credits = await client.fetchCredits(account.credential)
+      // Balance first: this read exists to close the reserve floor's cold-start
+      // hole, so writing the balance is the point (unlike the expiry warm,
+      // where it would be an unrequested side effect — S7). The deadline rides
+      // along for free; `noteCredits` merges both exactly as the request path
+      // does, so the two writers stay consistent.
+      this.noteCredits(account.id, credits.total, credits.nearestExpiryMs)
+    } catch (error: unknown) {
+      // Keep whatever reading we had; a failed read is not evidence of anything
+      // (same rule as the expiry warm). The account is named so a broken
+      // billing endpoint can be told apart from an unread pool.
+      this.logger?.warn?.(
+        `dsh-xdpool: could not read credits for ${account.label} `
+          + '(read failed); the reserve floor keeps passing it until a read succeeds',
+        error,
+      )
+    } finally {
+      this.creditWarmInflight.delete(account.id)
+    }
+  }
+
+  /**
+   * Top up one account's balance reading, from wherever the pool notices the
+   * reserve floor would run blind.
+   *
+   * Callers are `scan()` (a configured reserve with no reading yet) and
+   * `acquire()` (same condition, noticed on the way in) — both fire-and-forget
+   * and de-duplicated by {@link creditWarmInflight}, so a scan and an acquire
+   * racing each other spend one billing round trip, not two.
+   *
+   * Every gate lives here rather than in the callers (the same discipline as
+   * {@link warmExpiryReadingFor}): no client, no account, a dead sign-in, an
+   * already-running read, a reading that has already landed (the request path
+   * refreshes it from there), no reserve, or a failed attempt inside the
+   * throttle window all mean "do nothing".
+   */
+  warmCreditReadingFor(accountId: string): void {
+    const client = this.client
+    if (client?.fetchCredits === undefined) return
+    const account = this.accounts.find(item => item.id === accountId)
+    if (account === undefined) return
+    // No reserve, no reader: a balance read for an account the user has not
+    // protected is background traffic with no consumer (the mirror of the
+    // expiry warm's mode gate).
+    if ((this.creditReserves.get(accountId) ?? 0) <= 0) return
+    const now = Date.now()
+    if ((account.credentialDeadUntilMs ?? 0) > now) return
+    if (this.creditWarmInflight.has(accountId)) return
+    // A landed reading closes this gate for good: the request path's own
+    // refresh keeps it current, so re-reading it here would only race that.
+    if (this.creditBalances.has(accountId)) return
+    // Throttle FAILED attempts only, exactly as the expiry warm does: a
+    // reading that landed would have returned above.
+    const lastAttempt = this.creditWarmAttemptAt.get(accountId) ?? 0
+    if (now - lastAttempt < CREDIT_WARM_RETRY_MS) return
+    void this.warmOneCreditReading(account, client as TokenRefresher & CreditReader)
+  }
+
   /** All accounts, cooldown state included. */
   list(region?: WorkBuddyRegion): readonly WorkBuddyAccount[] {
     if (region === undefined) return this.accounts
@@ -1026,11 +1128,11 @@ export class WorkBuddyAccountPool {
       // reached the floor the user set for it. An account with no reading stays
       // in play (see creditBalances), so an unprobed pool is not stranded.
       //
-      // KNOWN GAP, deliberately not fixed here: on a cold start `creditBalances`
-      // is empty for the same reason `creditExpiry` was, so this floor silently
-      // does not apply until the first reading lands — the same structural bug
-      // as the expiry one, reported as V4 in
-      // `xdpool-fix/EXPIRY-ADVERSARIAL-20261111.md` §3 and tracked separately.
+      // The cold-start hole that used to live here (an empty `creditBalances`
+      // meant the floor silently did not apply until the first reading landed)
+      // is closed by the credit warm: scan() and acquire() now read the balance
+      // of any reserved-but-unread account, and the floor engages as soon as
+      // that reading lands (V4 in `EXPIRY-ADVERSARIAL-20261111.md` §3).
       const reserve = this.creditReserves.get(account.id)
       if (!reserveExempt?.has(account.id) && reserve !== undefined && reserve > 0) {
         const balance = this.creditBalances.get(account.id)
@@ -1449,6 +1551,14 @@ export class WorkBuddyAccountPool {
     const maxTries = this.accounts.length + 1
     for (let attempt = 0; attempt < maxTries; attempt += 1) {
       let bands = this.rankedPool(Date.now(), modelId, region, reserveExempt)
+      // V4 cold-start warm: a reserved account with no balance reading yet
+      // would pass the floor blind on this very pick (the gate above passes
+      // unknown accounts on purpose, so an unprobed pool is not stranded).
+      // Reading it now closes that hole moments after a cold start. Every
+      // dedup gate lives in warmCreditReadingFor itself (in-flight, throttle,
+      // landed reading), so this loop is a cheap no-op on repeat calls and
+      // never delays this pick — it stays fire-and-forget.
+      for (const account of bands.ready) this.warmCreditReadingFor(account.id)
       if (bands.ready.length === 0 && bands.limited.length === 0 && bands.resting.length === 0 && attempt === 0) {
         await this.scan()
         bands = this.rankedPool(Date.now(), modelId, region, reserveExempt)

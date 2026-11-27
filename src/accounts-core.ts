@@ -367,6 +367,17 @@ export const EXPIRY_READING_TTL_MS = 3_600_000
 export const EXPIRY_WARM_RETRY_MS = 60_000
 
 /**
+ * Shortest gap between two attempts at the same account's balance reading.
+ *
+ * Throttles FAILED attempts only: a successful read writes the balance
+ * itself, and that written reading is the gate that stays closed from then
+ * on (the request path's own refresh keeps it current after that). Without
+ * this, a billing endpoint that keeps failing would be re-hit on every scan
+ * and every acquire.
+ */
+export const CREDIT_WARM_RETRY_MS = 60_000
+
+/**
  * Does this refresh failure prove the credential itself is dead?
  *
  * The upstream answers a revoked refresh token with `invalid_grant: Offline user

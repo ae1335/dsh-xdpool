@@ -9,7 +9,7 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { WorkBuddyAccountPool } from '../src/accounts.ts'
 
 /** Write a fake auth directory holding `count` distinct CN accounts. */
@@ -168,5 +168,53 @@ describe('credit reserves', () => {
     // before the first request would strand the whole pool.
     const acquired = await instance.acquire()
     expect(acquired?.id).toBe(account.id)
+  })
+
+  it('warms the reading on acquire, so the floor engages without a served request (V4)', async () => {
+    // The V4 hole: a reserve set before the pool ever served anything left
+    // `creditBalances` empty forever on an idle pool — the card refresh only
+    // runs for accounts that already served, so the floor never engaged.
+    // acquire() now warms the reading itself; this pins that the floor is
+    // armed by the SECOND pick, with no request served in between.
+    const fetchCredits = vi.fn(async () => ({ total: 3, nearestExpiryMs: undefined }))
+    const dir = await fakeAuthDir(2)
+    const instance = new WorkBuddyAccountPool({
+      authDirs: [dir],
+      logger: { warn() {} },
+      client: { fetchCredits } as never,
+    })
+    await instance.scan()
+    const [first, second] = instance.list()
+    const reserved = first!
+    const other = second!
+
+    instance.setCreditReserves({ [reserved.id]: 100 })
+    // Cold: no reading, so the reserved account is still picked...
+    expect(await instance.acquire()).toBe(reserved)
+    // ...but acquire() warmed it. Wait for the fire-and-forget read to land.
+    await vi.waitFor(() => { expect(fetchCredits).toHaveBeenCalledWith(reserved.credential) })
+    await vi.waitFor(() => { expect(instance.isReserved(reserved.id)).toBe(true) })
+
+    // The reading landed below the floor, so the NEXT pick skips the reserved
+    // account — without a single request having been served through the shim.
+    const picked = await instance.acquire()
+    expect(picked?.id).toBe(other.id)
+    expect(instance.isReserved(reserved.id)).toBe(true)
+  })
+
+  it('does not warm an account whose reserve is 0', async () => {
+    // The warm is the user's reserve asking for a reading; with no reserve
+    // the read would be billing traffic with no consumer.
+    const fetchCredits = vi.fn(async () => ({ total: 3, nearestExpiryMs: undefined }))
+    const dir = await fakeAuthDir(1)
+    const instance = new WorkBuddyAccountPool({
+      authDirs: [dir],
+      logger: { warn() {} },
+      client: { fetchCredits } as never,
+    })
+    await instance.scan()
+    const account = instance.list()[0]!
+    expect(await instance.acquire()).toBe(account)
+    expect(fetchCredits).not.toHaveBeenCalled()
   })
 })
